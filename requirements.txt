@@ -1,0 +1,8 @@
+pytest>=8.0
+# Optional visualization backend; scripts fall back to SVG without it.
+# matplotlib>=3.7
+# Optional future model training:
+# torch>=2.0
+# stable-baselines3>=2.0
+# Optional Kaggle integration:
+# kaggle-environments>=1.14
