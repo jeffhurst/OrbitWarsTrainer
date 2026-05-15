@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "orbit-wars-rl"
+version = "0.1.0"
+description = "RL training, evaluation, visualization, and Kaggle submission tooling for Orbit Wars."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff>=0.4"]
+viz = ["matplotlib>=3.7"]
+rl = ["torch>=2.0", "stable-baselines3>=2.0"]
+kaggle = ["kaggle-environments>=1.14"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
