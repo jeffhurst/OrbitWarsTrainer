@@ -10,7 +10,16 @@ STANDALONE = r'''
 import math
 
 def _dist(a,b): return math.hypot(a[2]-b[2], a[3]-b[3])
-def _comet_ids(obs): return set(obs.get("comet_planet_ids", []) or [])
+def _comet_ids(obs):
+    ids = set(obs.get("comet_planet_ids", []) or [])
+    for group in obs.get("comets", []) or []:
+        if isinstance(group, dict):
+            ids.update(group.get("planet_ids", []) or [])
+        elif isinstance(group, (list, tuple)) and group:
+            first = group[0]
+            if isinstance(first, (list, tuple, set)):
+                ids.update(first)
+    return {int(pid) for pid in ids}
 def _orbiting(p): return math.hypot(p[2]-50.0, p[3]-50.0) + p[4] < 50.0
 def _quad(p):
     x,y=p[2],p[3]
