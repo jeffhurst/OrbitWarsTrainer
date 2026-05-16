@@ -44,41 +44,74 @@ def angle_between(source: Planet, target: Planet) -> float:
     return math.atan2(target.y - source.y, target.x - source.x)
 
 
+def future_orbit_position(
+    planet: Planet,
+    dt: float,
+    angular_velocity: float,
+    center: tuple[float, float] = CENTER,
+) -> tuple[float, float]:
+    """Return ``planet`` position after ``dt`` orbit updates around ``center``.
+
+    Orbit Wars observations encode orbiting planets by their current Cartesian point.
+    Assuming constant angular velocity, preserve the current orbital radius and advance
+    only the polar angle by ``angular_velocity * dt``.
+    """
+    cx, cy = center
+    radius = distance_from_center(planet, center)
+    current_angle = math.atan2(planet.y - cy, planet.x - cx)
+    predicted_angle = current_angle + angular_velocity * dt
+    return (cx + radius * math.cos(predicted_angle), cy + radius * math.sin(predicted_angle))
+
+
 def launch_angle(
     source: Planet,
     target: Planet,
     angular_velocity: float,
     fleet_speed: float,
     center: tuple[float, float] = CENTER,
+    launch_delay: float = 1.0,
 ) -> float:
-    """Return a launch angle that leads orbiting targets by predicted intercept time.
+    """Return a launch angle that leads orbiting endpoints by intercept time.
 
-    Static targets keep the historical direct ``atan2`` behavior. Orbiting targets are
-    approximated as rotating around ``center`` at constant ``angular_velocity`` while the
-    launched fleet travels in a straight line at ``fleet_speed``.
+    Orbit Wars advances orbiting planets once before applying launch actions for the
+    current turn, so the fleet origin for an orbiting source is the source's position
+    after ``launch_delay`` orbit updates. Orbiting targets are then led from that
+    predicted origin for the fleet travel time. Static endpoints preserve the direct
+    ``atan2`` behavior.
     """
-    if not is_orbiting_planet(target, center) or angular_velocity == 0.0 or fleet_speed <= 0.0:
+    source_orbiting = is_orbiting_planet(source, center)
+    target_orbiting = is_orbiting_planet(target, center)
+    should_predict_orbits = (source_orbiting or target_orbiting) and angular_velocity != 0.0
+
+    if not should_predict_orbits:
         return angle_between(source, target)
 
-    cx, cy = center
-    radius = distance_from_center(target, center)
-    current_angle = math.atan2(target.y - cy, target.x - cx)
+    launch_x, launch_y = (
+        future_orbit_position(source, launch_delay, angular_velocity, center)
+        if source_orbiting
+        else (source.x, source.y)
+    )
 
-    def predicted_position(t: float) -> tuple[float, float]:
-        predicted_angle = current_angle + angular_velocity * t
-        return (cx + radius * math.cos(predicted_angle), cy + radius * math.sin(predicted_angle))
+    def predicted_target_position(flight_time: float) -> tuple[float, float]:
+        if not target_orbiting:
+            return (target.x, target.y)
+        return future_orbit_position(target, launch_delay + flight_time, angular_velocity, center)
 
-    t = distance(source, target) / fleet_speed
-    for _ in range(12):
-        predicted_x, predicted_y = predicted_position(t)
-        next_t = distance_xy(source.x, source.y, predicted_x, predicted_y) / fleet_speed
-        if math.isclose(next_t, t, rel_tol=1e-6, abs_tol=1e-6):
+    if target_orbiting and fleet_speed > 0.0:
+        target_x, target_y = future_orbit_position(target, launch_delay, angular_velocity, center)
+        t = distance_xy(launch_x, launch_y, target_x, target_y) / fleet_speed
+        for _ in range(12):
+            predicted_x, predicted_y = predicted_target_position(t)
+            next_t = distance_xy(launch_x, launch_y, predicted_x, predicted_y) / fleet_speed
+            if math.isclose(next_t, t, rel_tol=1e-6, abs_tol=1e-6):
+                t = next_t
+                break
             t = next_t
-            break
-        t = next_t
+    else:
+        t = 0.0
 
-    predicted_x, predicted_y = predicted_position(t)
-    return math.atan2(predicted_y - source.y, predicted_x - source.x)
+    predicted_x, predicted_y = predicted_target_position(t)
+    return math.atan2(predicted_y - launch_y, predicted_x - launch_x)
 
 
 def is_orbiting_planet(
