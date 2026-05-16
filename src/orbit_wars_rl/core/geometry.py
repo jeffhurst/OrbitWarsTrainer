@@ -160,7 +160,7 @@ def predict_launch(
     Static targets use direct atan2. Orbiting targets are solved by finding
     the earliest time t where:
 
-        distance(source, predicted_target_position(t)) == fleet_speed * t
+        distance(source, predicted_target_position(t)) - source.radius == fleet_speed * t
     """
 
     source_xy = (source.x, source.y)
@@ -175,7 +175,7 @@ def predict_launch(
 
     def intercept_error(t: float) -> float:
         tx, ty = predicted_planet_position(target, t, angular_velocity, center)
-        d = distance_xy(source.x, source.y, tx, ty)
+        d = distance_xy(source.x, source.y, tx, ty) - source.radius
         return d - fleet_speed * t
 
     # Choose scan resolution.

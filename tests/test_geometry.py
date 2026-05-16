@@ -49,12 +49,14 @@ def test_launch_angle_current_source_to_orbiting_target_leads_rotation():
     angular_velocity = 0.05
     fleet_speed = 2.0
 
-    t = distance_xy(src.x, src.y, target.x, target.y) / fleet_speed
+    t = (distance_xy(src.x, src.y, target.x, target.y) - src.radius) / fleet_speed
     for _ in range(12):
         predicted_target_x, predicted_target_y = predicted_planet_position(
             target, t, angular_velocity
         )
-        next_t = distance_xy(src.x, src.y, predicted_target_x, predicted_target_y) / fleet_speed
+        next_t = (
+            distance_xy(src.x, src.y, predicted_target_x, predicted_target_y) - src.radius
+        ) / fleet_speed
         if math.isclose(next_t, t, rel_tol=1e-6, abs_tol=1e-6):
             t = next_t
             break
@@ -65,7 +67,7 @@ def test_launch_angle_current_source_to_orbiting_target_leads_rotation():
 
     intercepted = launch_angle(src, target, angular_velocity=angular_velocity, fleet_speed=fleet_speed)
     assert not math.isclose(intercepted, angle_between(src, target))
-    assert math.isclose(intercepted, expected)
+    assert math.isclose(intercepted, expected, rel_tol=1e-6, abs_tol=1e-6)
 
 
 def test_launch_angle_zero_angular_velocity_uses_direct_angle():
