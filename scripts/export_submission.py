@@ -21,6 +21,27 @@ def _comet_ids(obs):
                 ids.update(first)
     return {int(pid) for pid in ids}
 def _orbiting(p): return math.hypot(p[2]-50.0, p[3]-50.0) + p[4] < 50.0
+def _future_orbit_xy(p, dt, angular_velocity):
+    cx,cy=50.0,50.0
+    dx,dy=p[2]-cx,p[3]-cy
+    ang=angular_velocity*dt
+    ca,sa=math.cos(ang),math.sin(ang)
+    return cx + dx*ca - dy*sa, cy + dx*sa + dy*ca
+def _intercept_xy(src, t, angular_velocity):
+    if angular_velocity == 0.0 or not _orbiting(t):
+        return t[2], t[3]
+    tx,ty=t[2],t[3]
+    travel=math.hypot(tx-src[2], ty-src[3])
+    for _ in range(8):
+        tx,ty=_future_orbit_xy(t, travel, angular_velocity)
+        next_travel=math.hypot(tx-src[2], ty-src[3])
+        if abs(next_travel-travel) < 1e-9:
+            break
+        travel=next_travel
+    return tx,ty
+def _intercept_angle(src, t, angular_velocity):
+    tx,ty=_intercept_xy(src, t, angular_velocity)
+    return math.atan2(ty-src[3], tx-src[2])
 def _quad(p):
     x,y=p[2],p[3]
     if x>=50 and y<50: return 1
@@ -43,6 +64,7 @@ def _select(src, planets, player, comets):
 def agent(obs, config=None):
     planets=obs.get("planets", []) or []
     player=obs.get("player", 0)
+    angular_velocity=obs.get("angular_velocity", 0.0)
     comets=_comet_ids(obs)
     actions=[]
     for src in planets:
@@ -50,7 +72,7 @@ def agent(obs, config=None):
         chosen=_select(src, planets, player, comets)
         if src[5] < len(chosen): continue
         for t in chosen:
-            actions.append([int(src[0]), math.atan2(t[3]-src[3], t[2]-src[2]), 1])
+            actions.append([int(src[0]), _intercept_angle(src, t, angular_velocity), 1])
     return actions
 '''.lstrip()
 
