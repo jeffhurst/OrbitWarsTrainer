@@ -15,7 +15,9 @@ def test_noop_overrides_other_outputs():
 def test_activation_clamp_reserve_and_sequential_allocation():
     src = planet(0, 0, 0, ships=10)
     targets = [planet(1, 10, 0), planet(2, 0, 10)]
-    actions = decode_model_outputs(src, targets, [0.51, 0.6, 0.51, 1.5, 0, 0, 0, 0, 0], ActionDecodeConfig(reserve_ships=1))
+    actions = decode_model_outputs(
+        src, targets, [0.51, 0.6, 0.51, 1.5, 0, 0, 0, 0, 0], ActionDecodeConfig(reserve_ships=1)
+    )
     assert [a.num_ships for a in actions] == [6, 3]
     assert sum(a.num_ships for a in actions) == 9
     assert actions[0].to_row()[0] == 0
@@ -24,7 +26,33 @@ def test_activation_clamp_reserve_and_sequential_allocation():
 
 def test_threshold_and_minimum_one_ship():
     src = planet(0, 0, 0, ships=4)
-    actions = decode_model_outputs(src, [planet(1, 10, 0)], [0.5, 1, 0.51, 0.1, 0, 0, 0, 0, 0], ActionDecodeConfig(reserve_ships=1))
+    actions = decode_model_outputs(
+        src,
+        [planet(1, 10, 0)],
+        [0.5, 1, 0.51, 0.1, 0, 0, 0, 0, 0],
+        ActionDecodeConfig(reserve_ships=1),
+    )
     assert actions == []
-    actions = decode_model_outputs(src, [planet(1, 10, 0)], [0.51, 0.01, 0, 0, 0, 0, 0, 0, 0], ActionDecodeConfig(reserve_ships=1))
+    actions = decode_model_outputs(
+        src,
+        [planet(1, 10, 0)],
+        [0.51, 0.01, 0, 0, 0, 0, 0, 0, 0],
+        ActionDecodeConfig(reserve_ships=1),
+    )
     assert actions[0].num_ships == 1
+
+
+def test_decoder_uses_intercept_aware_launch_angle_context():
+    src = planet(0, 50, 80, ships=10)
+    target = planet(1, 70, 50)
+    outputs = [0.51, 0.5, 0, 0, 0, 0, 0, 0, 0]
+    direct_actions = decode_model_outputs(
+        src, [target], outputs, angular_velocity=0.0, fleet_speed=5.0
+    )
+    intercept_actions = decode_model_outputs(
+        src, [target], outputs, angular_velocity=0.05, fleet_speed=5.0
+    )
+    assert math.isclose(
+        direct_actions[0].direction_angle, math.atan2(target.y - src.y, target.x - src.x)
+    )
+    assert not math.isclose(intercept_actions[0].direction_angle, direct_actions[0].direction_angle)

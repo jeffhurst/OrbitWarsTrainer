@@ -1,4 +1,5 @@
 """Per-owned-planet model agent."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -30,11 +31,15 @@ class ModelAgent:
         planets = parse_planets(obs)
         player = int(obs.get("player", 0))
         comet_ids = comet_ids_from_obs(obs)
+        angular_velocity = float(obs.get("angular_velocity", 0.0))
+        fleet_speed = float(obs.get("fleet_speed", 1.0))
         builder = ObservationBuilder(self.candidate_config)
         total = total_production(planets, player)
         delta = self.tracker.change(player, total)
         previous_total = total - delta
-        actions: list[Action] = self.comet_controller.update_and_forced_actions(obs, player)
+        actions: list[Action] = self.comet_controller.update_and_forced_actions(
+            obs, player, angular_velocity=angular_velocity, fleet_speed=fleet_speed
+        )
         for source in [p for p in planets if p.owner == player and p.id not in comet_ids]:
             model_obs, chosen = builder.build_for_source(
                 source,
@@ -44,5 +49,14 @@ class ModelAgent:
                 comet_ids=comet_ids,
             )
             outputs = self.policy.predict(model_obs)
-            actions.extend(decode_model_outputs(source, chosen, outputs, self.action_config))
+            actions.extend(
+                decode_model_outputs(
+                    source,
+                    chosen,
+                    outputs,
+                    self.action_config,
+                    angular_velocity=angular_velocity,
+                    fleet_speed=fleet_speed,
+                )
+            )
         return rows(actions)
