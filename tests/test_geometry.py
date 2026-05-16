@@ -4,8 +4,8 @@ from orbit_wars_rl.core.geometry import (
     angle_between,
     distance,
     distance_xy,
-    future_orbit_position,
     launch_angle,
+    predicted_planet_position,
 )
 from orbit_wars_rl.core.types import Planet
 
@@ -33,56 +33,39 @@ def test_launch_angle_static_source_to_static_target_unchanged():
     )
 
 
-def test_launch_angle_orbiting_source_to_static_target_uses_predicted_origin():
+def test_launch_angle_orbiting_source_to_static_target_uses_current_source_position():
     src = p(0, 70, 50)
     target = p(1, 99, 70)
-    direct = angle_between(src, target)
 
-    launch_x, launch_y = future_orbit_position(src, dt=1.0, angular_velocity=0.1)
-    expected = math.atan2(target.y - launch_y, target.x - launch_x)
-
-    intercepted = launch_angle(src, target, angular_velocity=0.1, fleet_speed=5.0)
-    assert not math.isclose(intercepted, direct)
-    assert math.isclose(intercepted, expected)
+    assert math.isclose(
+        launch_angle(src, target, angular_velocity=0.25, fleet_speed=3.0),
+        angle_between(src, target),
+    )
 
 
-def test_launch_angle_orbiting_source_to_orbiting_target_uses_both_predicted_positions():
-    src = p(0, 70, 50)
-    target = p(1, 50, 70)
+def test_launch_angle_current_source_to_orbiting_target_leads_rotation():
+    src = p(0, 10, 30)
+    target = p(1, 50, 45)
     angular_velocity = 0.05
-    fleet_speed = 5.0
+    fleet_speed = 2.0
 
-    launch_x, launch_y = future_orbit_position(src, dt=1.0, angular_velocity=angular_velocity)
-    t = distance_xy(
-        launch_x,
-        launch_y,
-        *future_orbit_position(target, dt=1.0, angular_velocity=angular_velocity),
-    ) / fleet_speed
+    t = distance_xy(src.x, src.y, target.x, target.y) / fleet_speed
     for _ in range(12):
-        target_x, target_y = future_orbit_position(target, dt=1.0 + t, angular_velocity=angular_velocity)
-        next_t = distance_xy(launch_x, launch_y, target_x, target_y) / fleet_speed
+        predicted_target_x, predicted_target_y = predicted_planet_position(
+            target, t, angular_velocity
+        )
+        next_t = distance_xy(src.x, src.y, predicted_target_x, predicted_target_y) / fleet_speed
         if math.isclose(next_t, t, rel_tol=1e-6, abs_tol=1e-6):
             t = next_t
             break
         t = next_t
 
-    predicted_target_x, predicted_target_y = future_orbit_position(
-        target, dt=1.0 + t, angular_velocity=angular_velocity
-    )
-    expected = math.atan2(predicted_target_y - launch_y, predicted_target_x - launch_x)
+    predicted_target_x, predicted_target_y = predicted_planet_position(target, t, angular_velocity)
+    expected = math.atan2(predicted_target_y - src.y, predicted_target_x - src.x)
 
-    direct = angle_between(src, target)
     intercepted = launch_angle(src, target, angular_velocity=angular_velocity, fleet_speed=fleet_speed)
-    assert not math.isclose(intercepted, direct)
+    assert not math.isclose(intercepted, angle_between(src, target))
     assert math.isclose(intercepted, expected)
-
-
-def test_launch_angle_orbiting_target_leads_rotation():
-    src = p(0, 50, 80)
-    target = p(1, 70, 50)
-    direct = angle_between(src, target)
-    intercepted = launch_angle(src, target, angular_velocity=0.05, fleet_speed=5.0)
-    assert not math.isclose(intercepted, direct)
 
 
 def test_launch_angle_zero_angular_velocity_uses_direct_angle():
@@ -102,18 +85,6 @@ def test_segment_intersects_circle_direct_hit_and_miss():
     assert not trajectory_crosses_sun((40, 56), (60, 56), sun_radius=5)
 
 
-def test_launch_angle_orbiting_source_static_target_uses_current_source_position():
-    from orbit_wars_rl.core.geometry import launch_angle
-
-    src = p(0, 70, 50)
-    target = p(1, 99, 70)
-
-    assert math.isclose(
-        launch_angle(src, target, angular_velocity=0.25, fleet_speed=3.0),
-        angle_between(src, target),
-    )
-
-
 def test_predict_launch_returns_current_source_and_moving_target_endpoint_segment():
     from orbit_wars_rl.core.geometry import predict_launch, trajectory_crosses_sun
 
@@ -126,3 +97,16 @@ def test_predict_launch_returns_current_source_and_moving_target_endpoint_segmen
     assert launch.source_xy == (src.x, src.y)
     assert not math.isclose(launch.target_xy[1], target.y)
     assert not trajectory_crosses_sun(launch.source_xy, launch.target_xy)
+
+
+def test_predict_launch_sun_check_uses_current_source_not_predicted_source():
+    from orbit_wars_rl.core.geometry import predict_launch, trajectory_crosses_sun
+
+    src = p(0, 10, 30)
+    target = p(1, 50, 45)
+
+    launch = predict_launch(src, target, angular_velocity=0.05, fleet_speed=2.0)
+
+    assert launch.source_xy == (src.x, src.y)
+    assert not math.isclose(launch.target_xy[0], target.x)
+    assert trajectory_crosses_sun(launch.source_xy, launch.target_xy)
