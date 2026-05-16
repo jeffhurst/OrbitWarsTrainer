@@ -9,7 +9,7 @@ A complete Python 3.11+ project for training, evaluating, visualizing, and expor
 - Builds the exact 15-value per-planet model observation.
 - Decodes 9 model outputs into legal fleet launch actions.
 - Provides starter, random, heuristic, and model agents.
-- Renders starter-vs-starter candidate/trajectory debug images without depending on Kaggle rendering.
+- Renders real Kaggle Orbit Wars HTML replays for starter-vs-starter and model-vs-starter games.
 - Provides runnable scripts for training bootstrap, evaluation, watching, and Kaggle submission export.
 
 ## Orbit Wars at a high level
@@ -74,7 +74,11 @@ Counterclockwise mapping is Q1→Q2→Q3→Q4→Q1.
 python scripts/watch_starter_vs_starter.py
 ```
 
-This writes deterministic debug frames to `runs/watch/starter_vs_starter_*.png` when matplotlib is installed, or `runs/watch/starter_vs_starter_*.svg` via the dependency-free fallback. The frames show planets, comets, owned source planets, selected candidate lines, active fleets, and launch directions.
+This follows the Kaggle getting-started workflow: it creates the real `orbit_wars` Kaggle environment, runs `StarterAgent` against `StarterAgent`, and writes `runs/watch/starter_vs_starter.html` plus the raw `runs/watch/starter_vs_starter.json` episode. Install the Kaggle extra first if needed:
+
+```bash
+pip install -e .[kaggle]
+```
 
 ## Train
 
@@ -98,6 +102,8 @@ Evaluation writes JSON metrics under `runs/eval/` and includes starter, random, 
 python scripts/watch_model_vs_starter.py --model runs/models/bootstrap_policy.zip
 ```
 
+Like starter-vs-starter, this runs a real Kaggle environment episode and writes replay artifacts under `runs/watch/`.
+
 ## Export a Kaggle submission
 
 ```bash
@@ -118,6 +124,6 @@ The suite covers geometry, quadrants, candidate selection, observation building,
 
 - Orbiting planet detection uses `distance_from_center + radius < 50` unless replaced by environment constants.
 - Kaggle environment APIs are optional and isolated under `env/` because local installations can differ.
-- The local watch script is a deterministic visual fallback, not a full physics simulator.
+- Watch scripts require a Kaggle environment version that includes `orbit_wars`; they no longer use the old synthetic visual fallback.
 - The training pipeline currently bootstraps a policy artifact; full PPO/self-play integration should happen only after visual candidate validation.
 - Submission export currently embeds the robust starter fallback; model weight embedding is the next submission milestone.

@@ -10,7 +10,7 @@ from orbit_wars_rl.agents.random_agent import RandomAgent
 from orbit_wars_rl.agents.starter_agent import StarterAgent
 from orbit_wars_rl.evaluation.metrics import EvaluationMetrics
 from orbit_wars_rl.models.save_load import load_policy
-from orbit_wars_rl.visualization.watch import make_demo_observation
+from orbit_wars_rl.visualization.demo import make_demo_observation
 
 
 def evaluate(model_path: str | None = None, games: int = 4, out_dir: str | Path = "runs/eval") -> Path:

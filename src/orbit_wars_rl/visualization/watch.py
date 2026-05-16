@@ -1,60 +1,78 @@
-"""Watch utilities with Kaggle renderer fallback to local matplotlib snapshots."""
+"""Kaggle-backed watch/replay utilities."""
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any, Callable
 
-from orbit_wars_rl.env.kaggle_env import make_kaggle_env
-from orbit_wars_rl.visualization.render import render_observation
+from orbit_wars_rl.env.kaggle_env import require_kaggle_env
+
+AgentCallable = Callable[[dict[str, Any]], list]
+KaggleAgentCallable = Callable[[dict[str, Any], Any | None], list]
 
 
-def make_demo_observation(player: int = 0) -> dict[str, Any]:
-    return {
-        "player": player,
-        "angular_velocity": 0.03,
-        "comet_planet_ids": [8],
-        "comets": [{"planet_ids": [8], "paths": [], "path_index": 0}],
-        "fleets": [],
-        "planets": [
-            [0, 0, 80, 20, 2.0, 10, 3],
-            [1, 1, 20, 80, 2.0, 10, 3],
-            [2, -1, 70, 18, 1.7, 8, 5],
-            [3, -1, 62, 16, 1.5, 6, 4],
-            [4, -1, 35, 35, 1.2, 5, 2],
-            [5, -1, 20, 20, 1.2, 5, 5],
-            [6, -1, 15, 82, 1.5, 8, 4],
-            [7, -1, 75, 78, 1.5, 8, 4],
-            [8, -1, 50, 8, 1.0, 4, 1],
-        ],
-        "initial_planets": [],
-    }
+def _observation_dict(obs: Any) -> dict[str, Any]:
+    if isinstance(obs, dict):
+        return obs
+    if hasattr(obs, "items"):
+        return dict(obs.items())
+    if hasattr(obs, "__dict__"):
+        return vars(obs)
+    raise TypeError(f"Unsupported Kaggle observation type: {type(obs)!r}")
 
 
-def watch_agents(agent0: Callable[[dict], list], agent1: Callable[[dict], list], out_dir: str | Path = "runs/watch", steps: int = 3) -> list[Path]:
-    """Run a minimal visual debug session.
+def kaggle_agent(agent: AgentCallable) -> KaggleAgentCallable:
+    """Wrap a local one-argument agent for Kaggle's ``(observation, config)`` call shape."""
 
-    If the Kaggle Orbit Wars env is installed, this function tries to render through it in future
-    versions. The guaranteed path is a deterministic local snapshot series that overlays candidate
-    lines and the first-turn starter actions, enough to verify target selection and angles.
+    def wrapped(obs: dict[str, Any], config: Any | None = None) -> list:
+        del config
+        return agent(_observation_dict(obs))
+
+    return wrapped
+
+
+def _render_html(env: Any) -> str:
+    """Render a completed Kaggle episode to HTML across supported package versions."""
+    try:
+        rendered = env.render(mode="html", width=1000, height=800)
+    except TypeError:
+        rendered = env.render(mode="html")
+    if rendered is None:
+        raise RuntimeError("Kaggle environment did not return HTML from env.render(mode='html').")
+    return str(rendered)
+
+
+def _json_safe(value: Any) -> Any:
+    try:
+        json.dumps(value)
+        return value
+    except TypeError:
+        if isinstance(value, dict):
+            return {str(k): _json_safe(v) for k, v in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [_json_safe(v) for v in value]
+        return repr(value)
+
+
+def watch_agents(
+    agent0: AgentCallable,
+    agent1: AgentCallable,
+    out_dir: str | Path = "runs/watch",
+    name: str = "starter_vs_starter",
+) -> list[Path]:
+    """Run a real Kaggle Orbit Wars episode and save an HTML replay plus episode JSON.
+
+    This intentionally does not use the old synthetic snapshot renderer. It follows the Kaggle
+    environment workflow from the public getting-started notebook: create the ``orbit_wars``
+    environment, run two agents against each other, and render the completed episode.
     """
-    env = make_kaggle_env(debug=True)
-    # Keep fallback deterministic and always available; Kaggle APIs may vary by release.
-    paths: list[Path] = []
+    env = require_kaggle_env(debug=True)
+    env.run([kaggle_agent(agent0), kaggle_agent(agent1)])
+
     out = Path(out_dir)
-    for step in range(steps):
-        obs0 = make_demo_observation(0)
-        obs1 = make_demo_observation(1)
-        actions0 = agent0(obs0)
-        actions1 = agent1(obs1)
-        fleets = []
-        fid = 0
-        by_id = {int(p[0]): p for p in obs0["planets"]}
-        for owner, actions in [(0, actions0), (1, actions1)]:
-            for from_id, angle, ships in actions:
-                p = by_id[int(from_id)]
-                fleets.append([fid, owner, float(p[2]), float(p[3]), float(angle), int(from_id), int(ships)])
-                fid += 1
-        obs0["fleets"] = fleets
-        path = render_observation(obs0, out / f"starter_vs_starter_{step:03d}.png", title=f"Starter vs Starter debug step {step}")
-        paths.append(path)
-    return paths
+    out.mkdir(parents=True, exist_ok=True)
+    html_path = out / f"{name}.html"
+    json_path = out / f"{name}.json"
+    html_path.write_text(_render_html(env), encoding="utf-8")
+    json_path.write_text(json.dumps(_json_safe(env.toJSON()), indent=2) + "\n", encoding="utf-8")
+    return [html_path, json_path]

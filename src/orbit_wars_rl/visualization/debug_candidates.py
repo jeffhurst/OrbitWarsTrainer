@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .watch import make_demo_observation
+from .demo import make_demo_observation
 from .render import render_observation
 
 

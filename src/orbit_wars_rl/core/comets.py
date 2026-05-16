@@ -5,7 +5,6 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
-from .actions import ActionDecodeConfig
 from .candidates import comet_ids_from_obs
 from .geometry import angle_between, distance
 from .types import Action, Planet, parse_planets
