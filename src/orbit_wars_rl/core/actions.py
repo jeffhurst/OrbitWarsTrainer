@@ -7,7 +7,7 @@ import math
 from dataclasses import dataclass
 from typing import Sequence
 
-from .geometry import launch_angle
+from .geometry import DEFAULT_SUN_COLLISION_RADIUS, predict_launch, trajectory_crosses_sun
 from .types import Action, Planet
 
 LOGGER = logging.getLogger(__name__)
@@ -32,6 +32,7 @@ def decode_model_outputs(
     *,
     angular_velocity: float = 0.0,
     fleet_speed: float = 1.0,
+    sun_radius: float = DEFAULT_SUN_COLLISION_RADIUS,
 ) -> list[Action]:
     cfg = config or ActionDecodeConfig()
     if len(outputs) != 9:
@@ -53,10 +54,12 @@ def decode_model_outputs(
         ships = min(max(1, requested), remaining)
         if ships <= 0:
             continue
-        remaining -= ships
         target = candidates[idx]
-        actions.append(
-            Action(source.id, launch_angle(source, target, angular_velocity, fleet_speed), ships)
-        )
+        launch = predict_launch(source, target, angular_velocity, fleet_speed)
+        if trajectory_crosses_sun(launch.source_xy, launch.target_xy, sun_radius=sun_radius):
+            LOGGER.debug("source=%s target=%s skipped sun-crossing launch", source.id, target.id)
+            continue
+        remaining -= ships
+        actions.append(Action(source.id, launch.angle, ships))
     LOGGER.debug("source=%s decoded=%s", source.id, actions)
     return actions

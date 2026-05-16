@@ -6,7 +6,11 @@ from dataclasses import dataclass
 from typing import Any
 
 from orbit_wars_rl.core.candidates import CandidateConfig, comet_ids_from_obs, select_candidates
-from orbit_wars_rl.core.geometry import launch_angle
+from orbit_wars_rl.core.geometry import (
+    predict_launch,
+    sun_collision_radius_from_obs,
+    trajectory_crosses_sun,
+)
 from orbit_wars_rl.core.types import Action, parse_planets, rows
 
 
@@ -21,6 +25,7 @@ class HeuristicAgent:
         comet_ids = comet_ids_from_obs(obs)
         angular_velocity = float(obs.get("angular_velocity", 0.0))
         fleet_speed = float(obs.get("fleet_speed", 1.0))
+        sun_radius = sun_collision_radius_from_obs(obs)
         actions: list[Action] = []
         for source in [p for p in planets if p.owner == player and p.id not in comet_ids]:
             chosen = select_candidates(
@@ -31,10 +36,9 @@ class HeuristicAgent:
             target = chosen[0]
             if target.owner == player:
                 continue
+            launch = predict_launch(source, target, angular_velocity, fleet_speed)
+            if trajectory_crosses_sun(launch.source_xy, launch.target_xy, sun_radius=sun_radius):
+                continue
             ships = min(source.ships - self.reserve_ships, max(1, abs(target.ships) + 1))
-            actions.append(
-                Action(
-                    source.id, launch_angle(source, target, angular_velocity, fleet_speed), ships
-                )
-            )
+            actions.append(Action(source.id, launch.angle, ships))
         return rows(actions)

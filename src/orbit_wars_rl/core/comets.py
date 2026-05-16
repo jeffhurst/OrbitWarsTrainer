@@ -7,7 +7,12 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .candidates import comet_ids_from_obs
-from .geometry import distance, launch_angle
+from .geometry import (
+    distance,
+    predict_launch,
+    sun_collision_radius_from_obs,
+    trajectory_crosses_sun,
+)
 from .types import Action, Planet, parse_planets
 
 LOGGER = logging.getLogger(__name__)
@@ -55,6 +60,7 @@ class CometController:
         by_id = {p.id: p for p in planets}
 
         forced: list[Action] = []
+        sun_radius = sun_collision_radius_from_obs(obs)
         pending = set(self.memory.pending_by_player.get(player_id, set()))
         for cid in sorted(pending):
             comet = by_id.get(cid)
@@ -62,19 +68,29 @@ class CometController:
                 target = closest_non_comet_planet(comet, planets, comet_ids)
                 if target:
                     ships = comet.ships - max(0, self.reserve_ships)
-                    forced.append(
-                        Action(
+                    launch = predict_launch(comet, target, angular_velocity, fleet_speed)
+                    if trajectory_crosses_sun(
+                        launch.source_xy, launch.target_xy, sun_radius=sun_radius
+                    ):
+                        LOGGER.debug(
+                            "forced comet launch skipped sun-crossing path comet=%s target=%s",
                             comet.id,
-                            launch_angle(comet, target, angular_velocity, fleet_speed),
+                            target.id,
+                        )
+                    else:
+                        forced.append(
+                            Action(
+                                comet.id,
+                                launch.angle,
+                                ships,
+                            )
+                        )
+                        LOGGER.info(
+                            "forced comet launch comet=%s target=%s ships=%s",
+                            comet.id,
+                            target.id,
                             ships,
                         )
-                    )
-                    LOGGER.info(
-                        "forced comet launch comet=%s target=%s ships=%s",
-                        comet.id,
-                        target.id,
-                        ships,
-                    )
             self.memory.pending_by_player[player_id].discard(cid)
 
         for cid in comet_ids:

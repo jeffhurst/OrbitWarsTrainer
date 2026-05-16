@@ -47,3 +47,26 @@ def test_launch_angle_zero_angular_velocity_uses_direct_angle():
     assert math.isclose(
         launch_angle(src, target, angular_velocity=0.0, fleet_speed=5.0), angle_between(src, target)
     )
+
+
+def test_segment_intersects_circle_direct_hit_and_miss():
+    from orbit_wars_rl.core.geometry import segment_intersects_circle, trajectory_crosses_sun
+
+    assert segment_intersects_circle(40, 50, 60, 50, 50, 50, 5)
+    assert trajectory_crosses_sun((40, 50), (60, 50), sun_radius=5)
+    assert not segment_intersects_circle(40, 56, 60, 56, 50, 50, 5)
+    assert not trajectory_crosses_sun((40, 56), (60, 56), sun_radius=5)
+
+
+def test_predict_launch_returns_moving_source_and_target_endpoint_segment():
+    from orbit_wars_rl.core.geometry import predict_launch, trajectory_crosses_sun
+
+    src = p(0, 10, 30)
+    target = p(1, 50, 45)
+
+    assert trajectory_crosses_sun((src.x, src.y), (target.x, target.y))
+    launch = predict_launch(src, target, angular_velocity=0.05, fleet_speed=2.0)
+
+    assert not math.isclose(launch.source_xy[0], src.x)
+    assert not math.isclose(launch.target_xy[1], target.y)
+    assert not trajectory_crosses_sun(launch.source_xy, launch.target_xy)

@@ -8,6 +8,7 @@ from typing import Any, Protocol
 from orbit_wars_rl.core.actions import ActionDecodeConfig, decode_model_outputs
 from orbit_wars_rl.core.candidates import CandidateConfig, comet_ids_from_obs
 from orbit_wars_rl.core.comets import CometController
+from orbit_wars_rl.core.geometry import sun_collision_radius_from_obs
 from orbit_wars_rl.core.observations import ObservationBuilder
 from orbit_wars_rl.core.planets import total_production
 from orbit_wars_rl.core.state_tracker import ProductionTracker
@@ -33,6 +34,7 @@ class ModelAgent:
         comet_ids = comet_ids_from_obs(obs)
         angular_velocity = float(obs.get("angular_velocity", 0.0))
         fleet_speed = float(obs.get("fleet_speed", 1.0))
+        sun_radius = sun_collision_radius_from_obs(obs)
         builder = ObservationBuilder(self.candidate_config)
         total = total_production(planets, player)
         delta = self.tracker.change(player, total)
@@ -57,6 +59,7 @@ class ModelAgent:
                     self.action_config,
                     angular_velocity=angular_velocity,
                     fleet_speed=fleet_speed,
+                    sun_radius=sun_radius,
                 )
             )
         return rows(actions)
