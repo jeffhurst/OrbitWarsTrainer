@@ -56,3 +56,50 @@ def test_decoder_uses_intercept_aware_launch_angle_context():
         direct_actions[0].direction_angle, math.atan2(target.y - src.y, target.x - src.x)
     )
     assert not math.isclose(intercept_actions[0].direction_angle, direct_actions[0].direction_angle)
+
+
+def test_decoder_skips_launch_segment_passing_through_sun():
+    src = planet(0, 40, 50, ships=10)
+    target = planet(1, 60, 50)
+
+    actions = decode_model_outputs(
+        src,
+        [target],
+        [0.51, 0.5, 0, 0, 0, 0, 0, 0, 0],
+        ActionDecodeConfig(reserve_ships=1),
+        sun_radius=5,
+    )
+
+    assert actions == []
+
+
+def test_decoder_allows_launch_segment_outside_sun_radius():
+    src = planet(0, 40, 56, ships=10)
+    target = planet(1, 60, 56)
+
+    actions = decode_model_outputs(
+        src,
+        [target],
+        [0.51, 0.5, 0, 0, 0, 0, 0, 0, 0],
+        ActionDecodeConfig(reserve_ships=1),
+        sun_radius=5,
+    )
+
+    assert len(actions) == 1
+
+
+def test_decoder_filters_using_predicted_segment_not_current_positions():
+    src = planet(0, 0, 0, ships=10)
+    target = planet(1, 45, 60)
+
+    actions = decode_model_outputs(
+        src,
+        [target],
+        [0.51, 0.5, 0, 0, 0, 0, 0, 0, 0],
+        ActionDecodeConfig(reserve_ships=1),
+        angular_velocity=0.05,
+        fleet_speed=2.0,
+        sun_radius=5,
+    )
+
+    assert len(actions) == 1

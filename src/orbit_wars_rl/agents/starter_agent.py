@@ -7,7 +7,11 @@ from typing import Any
 
 from orbit_wars_rl.core.candidates import CandidateConfig, comet_ids_from_obs, select_candidates
 from orbit_wars_rl.core.comets import CometController
-from orbit_wars_rl.core.geometry import launch_angle
+from orbit_wars_rl.core.geometry import (
+    predict_launch,
+    sun_collision_radius_from_obs,
+    trajectory_crosses_sun,
+)
 from orbit_wars_rl.core.types import Action, parse_planets, rows
 
 
@@ -24,6 +28,7 @@ class StarterAgent:
         comet_ids = comet_ids_from_obs(obs)
         angular_velocity = float(obs.get("angular_velocity", 0.0))
         fleet_speed = float(obs.get("fleet_speed", 1.0))
+        sun_radius = sun_collision_radius_from_obs(obs)
         actions: list[Action] = []
         if self.include_comet_forced_actions:
             actions.extend(
@@ -42,10 +47,15 @@ class StarterAgent:
             if available < len(chosen) * self.ships_per_target:
                 continue
             for target in chosen:
+                launch = predict_launch(source, target, angular_velocity, fleet_speed)
+                if trajectory_crosses_sun(
+                    launch.source_xy, launch.target_xy, sun_radius=sun_radius
+                ):
+                    continue
                 actions.append(
                     Action(
                         source.id,
-                        launch_angle(source, target, angular_velocity, fleet_speed),
+                        launch.angle,
                         self.ships_per_target,
                     )
                 )
