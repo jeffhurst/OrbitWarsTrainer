@@ -89,3 +89,31 @@ def test_generated_submission_leads_orbiting_targets_but_not_when_velocity_is_ze
         moving_orbit_actions[0][1],
         ns["_intercept_angle"](base_obs["planets"][0], base_obs["planets"][1], 0.03),
     )
+
+
+def test_generated_submission_skips_sun_crossing_starter_action(tmp_path):
+    ns = generated_submission_namespace(tmp_path)
+    obs = {
+        "player": 0,
+        "sun_radius": 5,
+        "planets": [
+            [0, 0, 40, 50, 1, 5, 1],
+            [1, -1, 60, 50, 1, 5, 9],
+        ],
+    }
+
+    assert ns["agent"](obs) == []
+
+
+def test_generated_submission_allows_path_outside_sun_radius(tmp_path):
+    ns = generated_submission_namespace(tmp_path)
+    obs = {
+        "player": 0,
+        "sun_radius": 5,
+        "planets": [
+            [0, 0, 40, 56, 1, 5, 1],
+            [1, -1, 60, 56, 1, 5, 9],
+        ],
+    }
+
+    assert len(ns["agent"](obs)) == 1

@@ -15,7 +15,7 @@ from .types import Planet
 BOARD_SIZE = 100.0
 CENTER = (50.0, 50.0)
 ROTATION_RADIUS_LIMIT = 50.0
-DEFAULT_SUN_COLLISION_RADIUS = 5.0
+DEFAULT_SUN_COLLISION_RADIUS = 10.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,33 +156,31 @@ def predict_launch(
     fleet_speed: float,
     center: tuple[float, float] = CENTER,
 ) -> LaunchSolution:
-    """Return the launch angle and predicted straight segment endpoints.
+    """Return the launch angle and straight segment endpoints used for the launch.
 
-    Static endpoints keep the historical direct ``atan2`` behavior. Orbiting sources and targets
-    are approximated as rotating around ``center`` at constant ``angular_velocity`` while the
-    launched fleet travels in a straight line at ``fleet_speed``.
+    The launched fleet starts at the source planet's current position. Static targets keep the
+    historical direct ``atan2`` behavior. Orbiting targets are approximated as rotating around
+    ``center`` at constant ``angular_velocity`` while the launched fleet travels in a straight line
+    at ``fleet_speed``.
     """
-    if angular_velocity == 0.0 or fleet_speed <= 0.0:
-        return LaunchSolution(
-            angle_between(source, target), (source.x, source.y), (target.x, target.y)
-        )
+    source_xy = (source.x, source.y)
+    if not is_orbiting_planet(target, center) or angular_velocity == 0.0 or fleet_speed <= 0.0:
+        target_xy = (target.x, target.y)
+        return LaunchSolution(angle_between(source, target), source_xy, target_xy)
 
     t = distance(source, target) / fleet_speed
-    source_xy = (source.x, source.y)
     target_xy = (target.x, target.y)
     for _ in range(12):
-        source_xy = predicted_planet_position(source, t, angular_velocity, center)
         target_xy = predicted_planet_position(target, t, angular_velocity, center)
-        next_t = distance_xy(source_xy[0], source_xy[1], target_xy[0], target_xy[1]) / fleet_speed
+        next_t = distance_xy(source.x, source.y, target_xy[0], target_xy[1]) / fleet_speed
         if math.isclose(next_t, t, rel_tol=1e-6, abs_tol=1e-6):
             t = next_t
             break
         t = next_t
 
-    source_xy = predicted_planet_position(source, t, angular_velocity, center)
     target_xy = predicted_planet_position(target, t, angular_velocity, center)
     return LaunchSolution(
-        math.atan2(target_xy[1] - source_xy[1], target_xy[0] - source_xy[0]),
+        math.atan2(target_xy[1] - source.y, target_xy[0] - source.x),
         source_xy,
         target_xy,
     )

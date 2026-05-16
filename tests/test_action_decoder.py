@@ -89,8 +89,8 @@ def test_decoder_allows_launch_segment_outside_sun_radius():
 
 
 def test_decoder_filters_using_predicted_segment_not_current_positions():
-    src = planet(0, 10, 30, ships=10)
-    target = planet(1, 50, 45)
+    src = planet(0, 0, 0, ships=10)
+    target = planet(1, 45, 60)
 
     actions = decode_model_outputs(
         src,
