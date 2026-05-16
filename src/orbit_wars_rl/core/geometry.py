@@ -175,8 +175,8 @@ def predict_launch(
         next_t = distance_xy(source.x, source.y, target_xy[0], target_xy[1]) / fleet_speed
         if math.isclose(next_t, t, rel_tol=1e-6, abs_tol=1e-6):
             t = next_t
-            break
-        t = next_t
+    else:
+        t = 0.0
 
     target_xy = predicted_planet_position(target, t, angular_velocity, center)
     return LaunchSolution(
