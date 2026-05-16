@@ -1,4 +1,4 @@
-from orbit_wars_rl.core.candidates import CandidateConfig, select_candidates
+from orbit_wars_rl.core.candidates import select_candidates
 from orbit_wars_rl.core.types import Planet
 
 
