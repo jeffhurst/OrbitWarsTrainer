@@ -148,7 +148,6 @@ def predicted_planet_position(
     predicted_angle = current_angle + angular_velocity * t
     return (cx + radius * math.cos(predicted_angle), cy + radius * math.sin(predicted_angle))
 
-
 def predict_launch(
     source: Planet,
     target: Planet,
@@ -156,37 +155,89 @@ def predict_launch(
     fleet_speed: float,
     center: tuple[float, float] = CENTER,
 ) -> LaunchSolution:
-    """Return the launch angle and straight segment endpoints used for the launch.
+    """Return a launch angle that intercepts an orbiting target.
 
-    The launched fleet starts at the source planet's current position. Static targets keep the
-    historical direct ``atan2`` behavior. Orbiting targets are approximated as rotating around
-    ``center`` at constant ``angular_velocity`` while the launched fleet travels in a straight line
-    at ``fleet_speed``.
+    Static targets use direct atan2. Orbiting targets are solved by finding
+    the earliest time t where:
+
+        distance(source, predicted_target_position(t)) == fleet_speed * t
     """
+
     source_xy = (source.x, source.y)
-    if not is_orbiting_planet(target, center) or angular_velocity == 0.0 or fleet_speed <= 0.0:
+
+    if (
+        not is_orbiting_planet(target, center)
+        or angular_velocity == 0.0
+        or fleet_speed <= 0.0
+    ):
         target_xy = (target.x, target.y)
         return LaunchSolution(angle_between(source, target), source_xy, target_xy)
 
-    t = distance(source, target) / fleet_speed
-    target_xy = (target.x, target.y)
-    for _ in range(12):
-        target_xy = predicted_planet_position(target, t, angular_velocity, center)
-        next_t = distance_xy(source.x, source.y, target_xy[0], target_xy[1]) / fleet_speed
-        if math.isclose(next_t, t, rel_tol=1e-6, abs_tol=1e-6):
-            t = next_t
-            break
-        t = next_t
-    else:
-        t = 0.0
+    def intercept_error(t: float) -> float:
+        tx, ty = predicted_planet_position(target, t, angular_velocity, center)
+        d = distance_xy(source.x, source.y, tx, ty)
+        return d - fleet_speed * t
 
-    target_xy = predicted_planet_position(target, t, angular_velocity, center)
+    # Choose scan resolution.
+    # Smaller values are more accurate but slower.
+    scan_dt = 0.25
+
+    # Pick a reasonable max time horizon.
+    # You can tune this for your game.
+    max_t = 500.0
+
+    prev_t = 0.0
+    prev_f = intercept_error(prev_t)
+
+    t = scan_dt
+
+    while t <= max_t:
+        curr_f = intercept_error(t)
+
+        # We found a sign crossing, so the intercept time is between prev_t and t.
+        if prev_f * curr_f <= 0.0:
+            lo = prev_t
+            hi = t
+
+            # Bisection refinement
+            for _ in range(40):
+                mid = (lo + hi) * 0.5
+                mid_f = intercept_error(mid)
+
+                if prev_f * mid_f <= 0.0:
+                    hi = mid
+                    curr_f = mid_f
+                else:
+                    lo = mid
+                    prev_f = mid_f
+
+            intercept_t = (lo + hi) * 0.5
+            target_xy = predicted_planet_position(
+                target,
+                intercept_t,
+                angular_velocity,
+                center,
+            )
+
+            angle = math.atan2(
+                target_xy[1] - source.y,
+                target_xy[0] - source.x,
+            )
+
+            return LaunchSolution(angle, source_xy, target_xy)
+
+        prev_t = t
+        prev_f = curr_f
+        t += scan_dt
+
+    # Fallback: if no bracket was found, aim at current position.
+    # But this should be rare if max_t is large enough.
+    target_xy = (target.x, target.y)
     return LaunchSolution(
-        math.atan2(target_xy[1] - source.y, target_xy[0] - source.x),
+        math.atan2(target.y - source.y, target.x - source.x),
         source_xy,
         target_xy,
     )
-
 
 def launch_angle(
     source: Planet,
