@@ -1,4 +1,5 @@
 """Best-effort comet handling isolated from normal candidate selection."""
+
 from __future__ import annotations
 
 import logging
@@ -6,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .candidates import comet_ids_from_obs
-from .geometry import angle_between, distance
+from .geometry import distance, launch_angle
 from .types import Action, Planet, parse_planets
 
 LOGGER = logging.getLogger(__name__)
@@ -19,7 +20,9 @@ class CometMemory:
     pending_by_player: dict[int, set[int]] = field(default_factory=dict)
 
 
-def closest_non_comet_planet(comet: Planet, planets: list[Planet], comet_ids: set[int]) -> Planet | None:
+def closest_non_comet_planet(
+    comet: Planet, planets: list[Planet], comet_ids: set[int]
+) -> Planet | None:
     candidates = [p for p in planets if p.id != comet.id and p.id not in comet_ids]
     if not candidates:
         return None
@@ -38,7 +41,14 @@ class CometController:
         self.memory = CometMemory()
         self.reserve_ships = reserve_ships
 
-    def update_and_forced_actions(self, obs: dict[str, Any], player: int | None = None) -> list[Action]:
+    def update_and_forced_actions(
+        self,
+        obs: dict[str, Any],
+        player: int | None = None,
+        *,
+        angular_velocity: float = 0.0,
+        fleet_speed: float = 1.0,
+    ) -> list[Action]:
         planets = parse_planets(obs)
         player_id = int(obs.get("player", 0) if player is None else player)
         comet_ids = comet_ids_from_obs(obs)
@@ -52,8 +62,19 @@ class CometController:
                 target = closest_non_comet_planet(comet, planets, comet_ids)
                 if target:
                     ships = comet.ships - max(0, self.reserve_ships)
-                    forced.append(Action(comet.id, angle_between(comet, target), ships))
-                    LOGGER.info("forced comet launch comet=%s target=%s ships=%s", comet.id, target.id, ships)
+                    forced.append(
+                        Action(
+                            comet.id,
+                            launch_angle(comet, target, angular_velocity, fleet_speed),
+                            ships,
+                        )
+                    )
+                    LOGGER.info(
+                        "forced comet launch comet=%s target=%s ships=%s",
+                        comet.id,
+                        target.id,
+                        ships,
+                    )
             self.memory.pending_by_player[player_id].discard(cid)
 
         for cid in comet_ids:
@@ -64,7 +85,10 @@ class CometController:
                 continue
             old_owner = self.memory.owner_by_id.get(cid)
             old_ships = self.memory.ships_by_id.get(cid)
-            captured = old_owner is not None and (comet.owner != old_owner or (old_ships is not None and comet.ships > old_ships + max(1, comet.production)))
+            captured = old_owner is not None and (
+                comet.owner != old_owner
+                or (old_ships is not None and comet.ships > old_ships + max(1, comet.production))
+            )
             if captured and comet.owner >= 0:
                 self.memory.pending_by_player.setdefault(comet.owner, set()).add(cid)
             self.memory.owner_by_id[cid] = comet.owner

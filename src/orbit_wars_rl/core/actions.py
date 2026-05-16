@@ -1,4 +1,5 @@
 """Convert 9 model outputs into Orbit Wars launch actions."""
+
 from __future__ import annotations
 
 import logging
@@ -6,7 +7,7 @@ import math
 from dataclasses import dataclass
 from typing import Sequence
 
-from .geometry import angle_between
+from .geometry import launch_angle
 from .types import Action, Planet
 
 LOGGER = logging.getLogger(__name__)
@@ -28,6 +29,9 @@ def decode_model_outputs(
     candidates: Sequence[Planet],
     outputs: Sequence[float],
     config: ActionDecodeConfig | None = None,
+    *,
+    angular_velocity: float = 0.0,
+    fleet_speed: float = 1.0,
 ) -> list[Action]:
     cfg = config or ActionDecodeConfig()
     if len(outputs) != 9:
@@ -43,12 +47,16 @@ def decode_model_outputs(
         if not active or remaining <= 0:
             continue
         pct = clamp01(outputs[idx * 2 + 1])
-        requested = int(round(source.ships * pct)) if cfg.use_round else int(math.floor(source.ships * pct))
+        requested = (
+            int(round(source.ships * pct)) if cfg.use_round else int(math.floor(source.ships * pct))
+        )
         ships = min(max(1, requested), remaining)
         if ships <= 0:
             continue
         remaining -= ships
         target = candidates[idx]
-        actions.append(Action(source.id, angle_between(source, target), ships))
+        actions.append(
+            Action(source.id, launch_angle(source, target, angular_velocity, fleet_speed), ships)
+        )
     LOGGER.debug("source=%s decoded=%s", source.id, actions)
     return actions
