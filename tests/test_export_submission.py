@@ -89,3 +89,44 @@ def test_generated_submission_leads_orbiting_targets_but_not_when_velocity_is_ze
         moving_orbit_actions[0][1],
         ns["_intercept_angle"](base_obs["planets"][0], base_obs["planets"][1], 0.03),
     )
+
+def test_generated_submission_uses_predicted_source_for_moving_source_launches(tmp_path):
+    ns = generated_submission_namespace(tmp_path)
+    obs = {
+        "player": 0,
+        "angular_velocity": 0.03,
+        "fleet_speed": 1.0,
+        "planets": [
+            [0, 0, 70, 50, 1, 5, 1],
+            [1, -1, 90, 50, 10, 5, 9],
+        ],
+    }
+    direct_angle = math.atan2(50 - 50, 90 - 70)
+
+    actions = ns["agent"](obs)
+
+    assert len(actions) == 1
+    assert actions[0][0] == 0
+    assert actions[0][2] == 1
+    assert not math.isclose(actions[0][1], direct_angle)
+    assert math.isclose(
+        actions[0][1],
+        ns["_intercept_angle"](obs["planets"][0], obs["planets"][1], 0.03, 1.0),
+    )
+
+
+def test_generated_submission_suppresses_sun_crossing_launches(tmp_path):
+    ns = generated_submission_namespace(tmp_path)
+    obs = {
+        "player": 0,
+        "angular_velocity": 0.0,
+        "sun_radius": 8.0,
+        "planets": [
+            [0, 0, 30, 50, 1, 5, 1],
+            [1, -1, 70, 50, 1, 5, 9],
+        ],
+    }
+
+    assert ns["_sun_path_intersects"]((30, 50), (70, 50), 8.0)
+    assert ns["agent"](obs) == []
+

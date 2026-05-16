@@ -21,27 +21,47 @@ def _comet_ids(obs):
                 ids.update(first)
     return {int(pid) for pid in ids}
 def _orbiting(p): return math.hypot(p[2]-50.0, p[3]-50.0) + p[4] < 50.0
-def _future_orbit_xy(p, dt, angular_velocity):
+def _future_orbit_position(p, dt, angular_velocity):
+    if angular_velocity == 0.0 or not _orbiting(p):
+        return p[2], p[3]
     cx,cy=50.0,50.0
     dx,dy=p[2]-cx,p[3]-cy
     ang=angular_velocity*dt
     ca,sa=math.cos(ang),math.sin(ang)
     return cx + dx*ca - dy*sa, cy + dx*sa + dy*ca
-def _intercept_xy(src, t, angular_velocity):
-    if angular_velocity == 0.0 or not _orbiting(t):
-        return t[2], t[3]
+def _moving_intercept(src, t, angular_velocity, fleet_speed=1.0):
+    if angular_velocity == 0.0 or fleet_speed <= 0.0 or (not _orbiting(src) and not _orbiting(t)):
+        return (src[2], src[3]), (t[2], t[3])
+    travel=math.hypot(t[2]-src[2], t[3]-src[3]) / fleet_speed
+    sx,sy=src[2],src[3]
     tx,ty=t[2],t[3]
-    travel=math.hypot(tx-src[2], ty-src[3])
-    for _ in range(8):
-        tx,ty=_future_orbit_xy(t, travel, angular_velocity)
-        next_travel=math.hypot(tx-src[2], ty-src[3])
-        if abs(next_travel-travel) < 1e-9:
+    for _ in range(12):
+        sx,sy=_future_orbit_position(src, travel, angular_velocity)
+        tx,ty=_future_orbit_position(t, travel, angular_velocity)
+        next_travel=math.hypot(tx-sx, ty-sy) / fleet_speed
+        if math.isclose(next_travel, travel, rel_tol=1e-6, abs_tol=1e-6):
+            travel=next_travel
             break
         travel=next_travel
-    return tx,ty
-def _intercept_angle(src, t, angular_velocity):
-    tx,ty=_intercept_xy(src, t, angular_velocity)
-    return math.atan2(ty-src[3], tx-src[2])
+    return (sx,sy), (tx,ty)
+def _intercept_xy(src, t, angular_velocity, fleet_speed=1.0):
+    return _moving_intercept(src, t, angular_velocity, fleet_speed)[1]
+def _intercept_angle(src, t, angular_velocity, fleet_speed=1.0):
+    (sx,sy),(tx,ty)=_moving_intercept(src, t, angular_velocity, fleet_speed)
+    return math.atan2(ty-sy, tx-sx)
+def _sun_path_intersects(start, end, sun_radius=8.0):
+    cx,cy=50.0,50.0
+    sx,sy=start
+    ex,ey=end
+    dx,dy=ex-sx,ey-sy
+    seg_len_sq=dx*dx+dy*dy
+    if seg_len_sq == 0.0:
+        return math.hypot(sx-cx, sy-cy) <= sun_radius
+    u=((cx-sx)*dx+(cy-sy)*dy)/seg_len_sq
+    if u < 0.0: u = 0.0
+    elif u > 1.0: u = 1.0
+    px,py=sx+u*dx,sy+u*dy
+    return math.hypot(px-cx, py-cy) <= sun_radius
 def _quad(p):
     x,y=p[2],p[3]
     if x>=50 and y<50: return 1
@@ -65,6 +85,8 @@ def agent(obs, config=None):
     planets=obs.get("planets", []) or []
     player=obs.get("player", 0)
     angular_velocity=obs.get("angular_velocity", 0.0)
+    fleet_speed=float(obs.get("fleet_speed", 1.0) or 1.0)
+    sun_radius=float(obs.get("sun_radius", 8.0) or 0.0)
     comets=_comet_ids(obs)
     actions=[]
     for src in planets:
@@ -72,7 +94,10 @@ def agent(obs, config=None):
         chosen=_select(src, planets, player, comets)
         if src[5] < len(chosen): continue
         for t in chosen:
-            actions.append([int(src[0]), _intercept_angle(src, t, angular_velocity), 1])
+            start,end=_moving_intercept(src, t, angular_velocity, fleet_speed)
+            if _sun_path_intersects(start, end, sun_radius):
+                continue
+            actions.append([int(src[0]), math.atan2(end[1]-start[1], end[0]-start[0]), 1])
     return actions
 '''.lstrip()
 

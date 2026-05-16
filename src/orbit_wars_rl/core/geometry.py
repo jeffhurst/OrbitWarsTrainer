@@ -15,6 +15,7 @@ from .types import Planet
 BOARD_SIZE = 100.0
 CENTER = (50.0, 50.0)
 ROTATION_RADIUS_LIMIT = 50.0
+SUN_RADIUS = 8.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,6 +45,84 @@ def angle_between(source: Planet, target: Planet) -> float:
     return math.atan2(target.y - source.y, target.x - source.x)
 
 
+def future_orbit_position(
+    planet: Planet,
+    dt: float,
+    angular_velocity: float,
+    center: tuple[float, float] = CENTER,
+) -> tuple[float, float]:
+    """Return ``planet``'s predicted xy position after ``dt`` ticks.
+
+    Only orbiting planets rotate; static planets and zero angular velocity keep their
+    observed position.
+    """
+    if angular_velocity == 0.0 or not is_orbiting_planet(planet, center):
+        return planet.x, planet.y
+
+    cx, cy = center
+    radius = distance_from_center(planet, center)
+    current_angle = math.atan2(planet.y - cy, planet.x - cx)
+    predicted_angle = current_angle + angular_velocity * dt
+    return (cx + radius * math.cos(predicted_angle), cy + radius * math.sin(predicted_angle))
+
+
+def moving_intercept_positions(
+    source: Planet,
+    target: Planet,
+    angular_velocity: float,
+    fleet_speed: float,
+    center: tuple[float, float] = CENTER,
+) -> tuple[tuple[float, float], tuple[float, float]]:
+    """Return predicted source and target positions for an intercept launch.
+
+    The fixed-point solve uses the same future time for the launch origin and
+    intercept point, so orbiting sources and orbiting targets are treated consistently.
+    """
+    if (
+        angular_velocity == 0.0
+        or fleet_speed <= 0.0
+        or (not is_orbiting_planet(source, center) and not is_orbiting_planet(target, center))
+    ):
+        return (source.x, source.y), (target.x, target.y)
+
+    travel_time = distance(source, target) / fleet_speed
+    source_xy = (source.x, source.y)
+    target_xy = (target.x, target.y)
+    for _ in range(12):
+        source_xy = future_orbit_position(source, travel_time, angular_velocity, center)
+        target_xy = future_orbit_position(target, travel_time, angular_velocity, center)
+        next_time = distance_xy(source_xy[0], source_xy[1], target_xy[0], target_xy[1]) / fleet_speed
+        if math.isclose(next_time, travel_time, rel_tol=1e-6, abs_tol=1e-6):
+            travel_time = next_time
+            break
+        travel_time = next_time
+
+    return source_xy, target_xy
+
+
+def sun_path_intersects(
+    start: tuple[float, float],
+    end: tuple[float, float],
+    sun_center: tuple[float, float] = CENTER,
+    sun_radius: float = SUN_RADIUS,
+) -> bool:
+    """Return whether the segment from ``start`` to ``end`` intersects the sun."""
+    sx, sy = start
+    ex, ey = end
+    cx, cy = sun_center
+    dx = ex - sx
+    dy = ey - sy
+    seg_len_sq = dx * dx + dy * dy
+    if seg_len_sq == 0.0:
+        return distance_xy(sx, sy, cx, cy) <= sun_radius
+
+    u = ((cx - sx) * dx + (cy - sy) * dy) / seg_len_sq
+    u = min(1.0, max(0.0, u))
+    closest_x = sx + u * dx
+    closest_y = sy + u * dy
+    return distance_xy(closest_x, closest_y, cx, cy) <= sun_radius
+
+
 def launch_angle(
     source: Planet,
     target: Planet,
@@ -51,34 +130,11 @@ def launch_angle(
     fleet_speed: float,
     center: tuple[float, float] = CENTER,
 ) -> float:
-    """Return a launch angle that leads orbiting targets by predicted intercept time.
-
-    Static targets keep the historical direct ``atan2`` behavior. Orbiting targets are
-    approximated as rotating around ``center`` at constant ``angular_velocity`` while the
-    launched fleet travels in a straight line at ``fleet_speed``.
-    """
-    if not is_orbiting_planet(target, center) or angular_velocity == 0.0 or fleet_speed <= 0.0:
-        return angle_between(source, target)
-
-    cx, cy = center
-    radius = distance_from_center(target, center)
-    current_angle = math.atan2(target.y - cy, target.x - cx)
-
-    def predicted_position(t: float) -> tuple[float, float]:
-        predicted_angle = current_angle + angular_velocity * t
-        return (cx + radius * math.cos(predicted_angle), cy + radius * math.sin(predicted_angle))
-
-    t = distance(source, target) / fleet_speed
-    for _ in range(12):
-        predicted_x, predicted_y = predicted_position(t)
-        next_t = distance_xy(source.x, source.y, predicted_x, predicted_y) / fleet_speed
-        if math.isclose(next_t, t, rel_tol=1e-6, abs_tol=1e-6):
-            t = next_t
-            break
-        t = next_t
-
-    predicted_x, predicted_y = predicted_position(t)
-    return math.atan2(predicted_y - source.y, predicted_x - source.x)
+    """Return a launch angle that leads moving orbiting planets by predicted intercept time."""
+    source_xy, target_xy = moving_intercept_positions(
+        source, target, angular_velocity, fleet_speed, center
+    )
+    return math.atan2(target_xy[1] - source_xy[1], target_xy[0] - source_xy[0])
 
 
 def is_orbiting_planet(
