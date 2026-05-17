@@ -24,6 +24,28 @@ def clamp01(value: float) -> float:
     return max(0.0, min(1.0, float(value)))
 
 
+def get_fleet_speed(num_ships: int) -> float:
+    """
+    Return fleet speed based on fleet size.
+
+    Speed ranges from 1.0 to 6.0.
+    1 ship moves at 1.0.
+    1000+ ships move at max speed.
+    """
+    min_speed = 1.0
+    max_speed = 6.0
+
+    if num_ships <= 1:
+        return min_speed
+
+    ships = min(num_ships, 1000)
+
+    speed = min_speed + (max_speed - min_speed) * (
+        math.log(ships) / math.log(1000)
+    ) ** 1.5
+
+    return float(min(max(speed, min_speed), max_speed))
+
 def decode_model_outputs(
     source: Planet,
     candidates: Sequence[Planet],
@@ -55,6 +77,7 @@ def decode_model_outputs(
         if ships <= 0:
             continue
         target = candidates[idx]
+        fleet_speed = get_fleet_speed(ships)
         launch = predict_launch(source, target, angular_velocity, fleet_speed)
         if trajectory_crosses_sun(launch.source_xy, launch.target_xy, sun_radius=sun_radius):
             LOGGER.debug("source=%s target=%s skipped sun-crossing launch", source.id, target.id)
