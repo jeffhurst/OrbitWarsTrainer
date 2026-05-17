@@ -71,6 +71,7 @@ from orbit_wars_rl.core.observations import ObservationBuilder
 from orbit_wars_rl.core.planets import total_production
 from orbit_wars_rl.core.types import Planet, parse_planets, rows
 from orbit_wars_rl.env.kaggle_env import require_kaggle_env
+from orbit_wars_rl.training.reward import RewardShapingConfig, planet_capture_reward, ships_sent_reward
 
 
 class _FakeOrbitWarsBackend:
@@ -208,6 +209,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         self.candidate_config = CandidateConfig()
         self.action_config = ActionDecodeConfig()
         self.builder = ObservationBuilder(self.candidate_config)
+        self.reward_config = RewardShapingConfig()
         self.env: Any | None = None
         self.obs: dict[str, Any] = {}
         self.sources: list[Planet] = []
@@ -255,19 +257,25 @@ class OrbitWarsPlanetStepEnv(gym.Env):
             fleet_speed=float(self.obs.get("fleet_speed", 1.0)),
             sun_radius=sun_collision_radius_from_obs(self.obs),
         )
-        self.buffered_actions.extend(rows(decoded))
+        decoded_rows = rows(decoded)
+        send_reward = ships_sent_reward(decoded_rows, self.reward_config)
+        self.buffered_actions.extend(decoded_rows)
         self.current_source_index += 1
         if self.current_source_index < len(self.sources):
             return (
                 self._current_obs(),
-                0.0,
+                send_reward,
                 False,
                 False,
-                {"turn_advanced": False, "source_id": self._current_source_id()},
+                {
+                    "turn_advanced": False,
+                    "source_id": self._current_source_id(),
+                    "send_reward": send_reward,
+                },
             )
-        return self._advance_turn(self.buffered_actions)
+        return self._advance_turn(self.buffered_actions, send_reward)
 
-    def _advance_turn(self, candidate_actions: list):
+    def _advance_turn(self, candidate_actions: list, send_reward: float = 0.0):
         assert self.env is not None
         opponent_player = 1 - self.candidate_player
         opponent_obs = _extract_player_observation(self.env, opponent_player)
@@ -275,16 +283,22 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         actions0 = candidate_actions if self.candidate_player == 0 else opponent_actions
         actions1 = opponent_actions if self.candidate_player == 0 else candidate_actions
         production_before = self.previous_total_production
+        planets_before = parse_planets(self.obs)
         _step_kaggle_env(self.env, actions0, actions1)
         self.turn_index += 1
         self.obs = _extract_player_observation(self.env, self.candidate_player)
-        current_total = total_production(parse_planets(self.obs), self.candidate_player)
-        reward = float(current_total - production_before)
+        planets_after = parse_planets(self.obs)
+        current_total = total_production(planets_after, self.candidate_player)
+        production_delta = float(current_total - production_before)
+        capture_reward = planet_capture_reward(
+            planets_before, planets_after, self.candidate_player, self.reward_config
+        )
+        reward = float(production_delta + capture_reward + send_reward)
         self.previous_total_production = current_total
         buffered = list(candidate_actions)
         self.buffered_actions = []
         self._rebuild_sources()
-        planets = parse_planets(self.obs)
+        planets = planets_after
         candidate_has_planets = any(p.owner == self.candidate_player for p in planets)
         opponent_has_planets = any(p.owner == opponent_player for p in planets)
         terminated = _is_kaggle_done(self.env) or not candidate_has_planets or not opponent_has_planets
@@ -298,7 +312,9 @@ class OrbitWarsPlanetStepEnv(gym.Env):
                 "turn_advanced": True,
                 "production_before": production_before,
                 "production_after": current_total,
-                "production_delta": reward,
+                "production_delta": production_delta,
+                "capture_reward": capture_reward,
+                "send_reward": send_reward,
                 "buffered_actions": buffered,
                 "turn_index": self.turn_index,
                 "source_id": self._current_source_id(),

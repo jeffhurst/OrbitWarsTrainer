@@ -1,7 +1,20 @@
 """Simple reward utilities for rollout/evaluation bookkeeping."""
 from __future__ import annotations
 
-from orbit_wars_rl.core.types import parse_fleets, parse_planets
+from dataclasses import dataclass
+from typing import Iterable
+
+from orbit_wars_rl.core.types import Planet, parse_fleets, parse_planets
+
+
+@dataclass(frozen=True, slots=True)
+class RewardShapingConfig:
+    """Small auxiliary reward terms that keep production control dominant."""
+
+    send_ship_reward: float = 0.001
+    capture_production_bonus: float = 0.10
+    enemy_capture_production_bonus: float = 0.50
+    loss_production_penalty: float = 0.10
 
 
 def player_score(obs: dict, player: int) -> float:
@@ -12,3 +25,42 @@ def player_score(obs: dict, player: int) -> float:
 
 def production_controlled(obs: dict, player: int) -> float:
     return float(sum(p.production for p in parse_planets(obs) if p.owner == player))
+
+
+def ships_sent_reward(actions: Iterable, config: RewardShapingConfig | None = None) -> float:
+    """Return a tiny reward for launching ships instead of no-oping."""
+    cfg = config or RewardShapingConfig()
+    ships_sent = 0
+    for action in actions:
+        if hasattr(action, "num_ships"):
+            ships_sent += max(0, int(action.num_ships))
+        else:
+            ships_sent += max(0, int(action[2]))
+    return float(ships_sent * cfg.send_ship_reward)
+
+
+def planet_capture_reward(
+    before_planets: Iterable[Planet],
+    after_planets: Iterable[Planet],
+    player: int,
+    config: RewardShapingConfig | None = None,
+) -> float:
+    """Reward production-scaled planet captures and penalize production-scaled losses.
+
+    The primary reward remains the raw controlled-production delta. These shaping terms are
+    deliberately smaller multipliers on planet production; capturing an enemy planet receives the
+    largest auxiliary bonus because it both adds to the candidate and denies the opponent.
+    """
+    cfg = config or RewardShapingConfig()
+    before_by_id = {p.id: p for p in before_planets}
+    reward = 0.0
+    for after in after_planets:
+        before = before_by_id.get(after.id)
+        if before is None or before.owner == after.owner:
+            continue
+        if after.owner == player and before.owner != player:
+            multiplier = cfg.enemy_capture_production_bonus if before.owner >= 0 else cfg.capture_production_bonus
+            reward += after.production * multiplier
+        elif before.owner == player and after.owner != player:
+            reward -= before.production * cfg.loss_production_penalty
+    return float(reward)
