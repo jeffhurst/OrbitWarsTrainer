@@ -1,3 +1,5 @@
+import pytest
+
 from orbit_wars_rl.env.ppo_planet_env import OrbitWarsPlanetStepEnv
 
 
@@ -18,5 +20,6 @@ def test_fake_planet_step_env_shapes_and_production_delta_reward():
     next_obs, reward, terminated, truncated, info = env.step([0.0] * 9)
     assert next_obs.shape == (15,)
     assert info["turn_advanced"] is True
-    assert reward == info["production_after"] - info["production_before"]
-    assert reward == info["production_delta"]
+    assert info["production_delta"] == info["production_after"] - info["production_before"]
+    assert info["capture_reward"] == pytest.approx(0.5)
+    assert reward == pytest.approx(info["production_delta"] + info["capture_reward"] + info["send_reward"])
