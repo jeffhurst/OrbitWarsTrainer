@@ -21,9 +21,18 @@ class RewardShapingConfig:
 
 
 def player_score(obs: dict, player: int) -> float:
+    """Return the terminal outcome score used by training and evaluation.
+
+    This trainer scores terminal outcomes by total ship count controlled by each player,
+    including ships stationed on planets and ships in flight. Production control remains a dense
+    shaping signal, but terminal win/loss rewards and evaluation win rate intentionally use this
+    shared ship-count outcome.
+    """
     planets = parse_planets(obs)
     fleets = parse_fleets(obs)
-    return float(sum(p.ships for p in planets if p.owner == player) + sum(f.ships for f in fleets if f.owner == player))
+    planet_ships = sum(p.ships for p in planets if p.owner == player)
+    fleet_ships = sum(f.ships for f in fleets if f.owner == player)
+    return float(planet_ships + fleet_ships)
 
 
 def production_controlled(obs: dict, player: int) -> float:

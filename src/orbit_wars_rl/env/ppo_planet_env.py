@@ -326,7 +326,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         opponent_has_planets = any(p.owner == opponent_player for p in planets)
         terminated = _is_kaggle_done(self.env) or not candidate_has_planets or not opponent_has_planets
         truncated = self.turn_index >= self.max_episode_turns
-        if terminated:
+        if terminated or truncated:
             terminal_reward = game_outcome_reward(
                 candidate_score=player_score(self.obs, self.candidate_player),
                 opponent_score=player_score(self.obs, opponent_player),

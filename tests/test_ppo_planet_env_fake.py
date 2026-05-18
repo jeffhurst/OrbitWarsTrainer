@@ -100,3 +100,29 @@ def test_fake_planet_step_env_adds_early_win_terminal_bonus(monkeypatch):
     assert reward == pytest.approx(
         info["production_delta"] + info["capture_reward"] + info["send_reward"] + info["terminal_reward"]
     )
+
+
+def test_fake_planet_step_env_adds_ship_score_terminal_bonus_on_truncation(monkeypatch):
+    from orbit_wars_rl.env import ppo_planet_env
+
+    def fake_step_kaggle_env(backend, actions_for_player0, actions_for_player1):
+        del actions_for_player0, actions_for_player1
+        backend.turn += 1
+        backend.obs["step"] = backend.turn
+        backend.obs["planets"] = [
+            [0, 0, 0.0, 0.0, 1.0, 100, 1.0],
+            [1, 1, 0.0, 0.0, 1.0, 1, 50.0],
+        ]
+
+    monkeypatch.setattr(ppo_planet_env, "_step_kaggle_env", fake_step_kaggle_env)
+    env = OrbitWarsPlanetStepEnv(require_kaggle=False, max_episode_turns=1)
+    env.reset(seed=123)
+
+    _next_obs, reward, terminated, truncated, info = env._advance_turn([])
+
+    assert terminated is False
+    assert truncated is True
+    assert info["terminal_reward"] == pytest.approx(25.0)
+    assert reward == pytest.approx(
+        info["production_delta"] + info["capture_reward"] + info["send_reward"] + info["terminal_reward"]
+    )

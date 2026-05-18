@@ -1,10 +1,12 @@
 import pytest
 
-from orbit_wars_rl.core.types import Planet
+from orbit_wars_rl.core.planets import total_production
+from orbit_wars_rl.core.types import Planet, parse_planets
 from orbit_wars_rl.training.reward import (
     RewardShapingConfig,
     game_outcome_reward,
     planet_capture_reward,
+    player_score,
     ships_sent_reward,
     win_speed_bonus,
 )
@@ -72,3 +74,16 @@ def test_game_outcome_reward_adds_scaled_win_bonus_and_static_loss_penalty():
         max_episode_turns=100,
         config=cfg,
     ) == pytest.approx(0.0)
+
+
+def test_player_score_uses_ship_count_when_production_winner_differs():
+    obs = {
+        "planets": [
+            [0, 0, 0.0, 0.0, 1.0, 100, 1.0],
+            [1, 1, 0.0, 0.0, 1.0, 1, 50.0],
+        ],
+        "fleets": [[0, 1, 0.0, 0.0, 0.0, 1, 5]],
+    }
+
+    assert total_production(parse_planets(obs), 0) < total_production(parse_planets(obs), 1)
+    assert player_score(obs, 0) > player_score(obs, 1)
