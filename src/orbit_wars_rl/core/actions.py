@@ -1,4 +1,4 @@
-"""Convert 9 model outputs into Orbit Wars launch actions."""
+"""Convert model outputs into Orbit Wars launch actions."""
 
 from __future__ import annotations
 
@@ -46,6 +46,8 @@ def get_fleet_speed(num_ships: int) -> float:
 
     return float(min(max(speed, min_speed), max_speed))
 
+SEND_FRACTIONS = (0.0, 0.05, 0.15, 0.30, 0.50, 1.00)
+
 def decode_model_outputs(
     source: Planet,
     candidates: Sequence[Planet],
@@ -57,23 +59,33 @@ def decode_model_outputs(
     sun_radius: float = DEFAULT_SUN_COLLISION_RADIUS,
 ) -> list[Action]:
     cfg = config or ActionDecodeConfig()
-    if len(outputs) != 9:
-        raise ValueError(f"expected 9 model outputs, got {len(outputs)}")
-    if float(outputs[8]) > cfg.activation_threshold:
-        LOGGER.debug("source=%s no-op activated", source.id)
-        return []
+    output_len = len(outputs)
+    if output_len not in (4, 8):
+        raise ValueError(f"expected 4 or 8 model outputs, got {output_len}")
 
     remaining = max(0, int(source.ships) - max(0, cfg.reserve_ships))
     actions: list[Action] = []
-    for idx in range(min(4, len(candidates))):
-        active = float(outputs[idx * 2]) > cfg.activation_threshold
-        if not active or remaining <= 0:
-            continue
-        pct = clamp01(outputs[idx * 2 + 1])
-        requested = (
-            int(round(source.ships * pct)) if cfg.use_round else int(math.floor(source.ships * pct))
-        )
-        ships = min(max(1, requested), remaining)
+    if output_len == 4:
+        weights = [SEND_FRACTIONS[max(0, min(5, int(v)))] for v in outputs[: min(4, len(candidates))]]
+        total_weight = sum(weights)
+        if total_weight <= 0.0:
+            return []
+        requests = [int(math.floor(remaining * (w / total_weight))) if w > 0 else 0 for w in weights]
+    else:
+        requests = []
+        for idx in range(min(4, len(candidates))):
+            active = float(outputs[idx * 2]) > cfg.activation_threshold
+            if not active:
+                requests.append(0)
+                continue
+            pct = clamp01(outputs[idx * 2 + 1])
+            requested = int(round(source.ships * pct)) if cfg.use_round else int(math.floor(source.ships * pct))
+            requests.append(max(1, requested))
+
+    for idx, requested in enumerate(requests):
+        if remaining <= 0:
+            break
+        ships = min(max(0, requested), remaining)
         if ships <= 0:
             continue
         target = candidates[idx]

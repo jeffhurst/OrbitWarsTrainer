@@ -42,6 +42,7 @@ def train_ppo(config: PPOTrainConfig) -> Path:
     policy_kwargs = dict(
         activation_fn=th.nn.ReLU,
         net_arch=dict(pi=list(config.net_arch), vf=list(config.net_arch)),
+        log_std_init=-2.0,
     )
     model = PPO(
         "MlpPolicy",
@@ -61,6 +62,7 @@ def train_ppo(config: PPOTrainConfig) -> Path:
         seed=config.seed,
         verbose=config.verbose,
         device="cpu",
+        target_kl=0.03,
     )
     model.learn(total_timesteps=config.timesteps, progress_bar=False)
     out = Path(config.out)

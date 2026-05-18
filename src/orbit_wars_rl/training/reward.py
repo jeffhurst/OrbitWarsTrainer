@@ -11,7 +11,7 @@ from orbit_wars_rl.core.types import Planet, parse_fleets, parse_planets
 class RewardShapingConfig:
     """Small auxiliary reward terms that keep production control dominant."""
 
-    send_ship_reward: float = 0.001
+    send_ship_reward: float = 0.0
     capture_production_bonus: float = 0.10
     enemy_capture_production_bonus: float = 0.50
     loss_production_penalty: float = 0.10
@@ -37,6 +37,18 @@ def player_score(obs: dict, player: int) -> float:
 
 def production_controlled(obs: dict, player: int) -> float:
     return float(sum(p.production for p in parse_planets(obs) if p.owner == player))
+
+
+
+
+def production_advantage(obs: dict, player: int) -> float:
+    opponent = 1 - player
+    return production_controlled(obs, player) - production_controlled(obs, opponent)
+
+
+def score_advantage(obs: dict, player: int) -> float:
+    opponent = 1 - player
+    return player_score(obs, player) - player_score(obs, opponent)
 
 
 def ships_sent_reward(actions: Iterable, config: RewardShapingConfig | None = None) -> float:
