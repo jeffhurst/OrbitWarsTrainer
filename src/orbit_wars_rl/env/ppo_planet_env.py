@@ -1,6 +1,7 @@
 """Gymnasium planet-step wrapper for PPO Orbit Wars training."""
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 try:
@@ -192,16 +193,24 @@ class OrbitWarsPlanetStepEnv(gym.Env):
     def __init__(
         self,
         opponent: str = "starter",
+        opponent_model: str | Path | None = None,
         candidate_player: int = 0,
         seed: int = 0,
         max_episode_turns: int = 400,
         require_kaggle: bool = True,
     ):
-        if opponent != "starter":
-            raise ValueError("only opponent='starter' is supported for PPO training")
+        if opponent == "starter":
+            if opponent_model is not None:
+                raise ValueError("opponent_model must be None when opponent='starter'")
+        elif opponent == "model":
+            if opponent_model is None:
+                raise ValueError("opponent_model is required when opponent='model'")
+        else:
+            raise ValueError("opponent must be one of: 'starter', 'model'")
         if candidate_player not in (0, 1):
             raise ValueError("candidate_player must be 0 or 1")
         self.opponent = opponent
+        self.opponent_model = opponent_model
         self.candidate_player = candidate_player
         self.seed_value = seed
         self.max_episode_turns = max_episode_turns
@@ -211,6 +220,8 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         self.builder = ObservationBuilder(self.candidate_config)
         self.reward_config = RewardShapingConfig()
         self.env: Any | None = None
+        self.opponent_agent: Any | None = None
+        self._opponent_policy: Any | None = None
         self.obs: dict[str, Any] = {}
         self.sources: list[Planet] = []
         self.current_source_index = 0
@@ -223,6 +234,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         if seed is not None:
             self.seed_value = seed
         self.env = require_kaggle_env(debug=True) if self.require_kaggle else _FakeOrbitWarsBackend(self.seed_value)
+        self.opponent_agent = self._build_opponent_agent()
         reset = getattr(self.env, "reset", None)
         if callable(reset):
             reset()
@@ -279,7 +291,9 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         assert self.env is not None
         opponent_player = 1 - self.candidate_player
         opponent_obs = _extract_player_observation(self.env, opponent_player)
-        opponent_actions = StarterAgent().act(opponent_obs)
+        if self.opponent_agent is None:
+            self.opponent_agent = self._build_opponent_agent()
+        opponent_actions = self.opponent_agent.act(opponent_obs)
         actions0 = candidate_actions if self.candidate_player == 0 else opponent_actions
         actions1 = opponent_actions if self.candidate_player == 0 else candidate_actions
         production_before = self.previous_total_production
@@ -320,6 +334,18 @@ class OrbitWarsPlanetStepEnv(gym.Env):
                 "source_id": self._current_source_id(),
             },
         )
+
+    def _build_opponent_agent(self) -> Any:
+        if self.opponent == "starter":
+            return StarterAgent()
+        if self._opponent_policy is None:
+            from orbit_wars_rl.models.sb3_policy import SB3PolicyAdapter
+
+            assert self.opponent_model is not None
+            self._opponent_policy = SB3PolicyAdapter.load(self.opponent_model, device="cpu")
+        from orbit_wars_rl.agents.model_agent import ModelAgent
+
+        return ModelAgent(policy=self._opponent_policy)
 
     def _rebuild_sources(self) -> None:
         planets = parse_planets(self.obs)

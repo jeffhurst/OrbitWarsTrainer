@@ -27,7 +27,8 @@ def main() -> None:
     parser.add_argument("--vf-coef", type=float, default=0.5)
     parser.add_argument("--max-grad-norm", type=float, default=0.5)
     parser.add_argument("--net-arch", default="256,256,128")
-    parser.add_argument("--opponent", default="starter")
+    parser.add_argument("--opponent", choices=("starter", "model"), default="starter")
+    parser.add_argument("--opponent-model", default=None)
     parser.add_argument("--candidate-player", type=int, default=0)
     parser.add_argument("--max-episode-turns", type=int, default=400)
     parser.add_argument("--tensorboard-log", default="runs/tensorboard")
@@ -57,6 +58,7 @@ def main() -> None:
         max_grad_norm=args.max_grad_norm,
         net_arch=parse_net_arch(args.net_arch),
         opponent=args.opponent,
+        opponent_model=args.opponent_model,
         candidate_player=args.candidate_player,
         max_episode_turns=args.max_episode_turns,
         require_kaggle=args.require_kaggle,

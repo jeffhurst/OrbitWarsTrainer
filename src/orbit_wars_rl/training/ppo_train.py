@@ -26,6 +26,7 @@ def train_ppo(config: PPOTrainConfig) -> Path:
 
     env = OrbitWarsPlanetStepEnv(
         opponent=config.opponent,
+        opponent_model=config.opponent_model,
         candidate_player=config.candidate_player,
         seed=config.seed,
         max_episode_turns=config.max_episode_turns,
