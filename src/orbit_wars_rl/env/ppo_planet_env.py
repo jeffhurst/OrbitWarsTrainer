@@ -64,6 +64,7 @@ except Exception:  # pragma: no cover - exercised only in minimal installations.
     gym = _Gym()  # type: ignore[assignment]
     spaces = _Spaces()  # type: ignore[assignment]
 
+from orbit_wars_rl.agents.model_agent import ModelAgent
 from orbit_wars_rl.agents.starter_agent import StarterAgent
 from orbit_wars_rl.core.actions import ActionDecodeConfig, decode_model_outputs
 from orbit_wars_rl.core.candidates import CandidateConfig, comet_ids_from_obs
@@ -72,6 +73,7 @@ from orbit_wars_rl.core.observations import ObservationBuilder
 from orbit_wars_rl.core.planets import total_production
 from orbit_wars_rl.core.types import Planet, parse_planets, rows
 from orbit_wars_rl.env.kaggle_env import require_kaggle_env
+from orbit_wars_rl.models.save_load import load_any_policy
 from orbit_wars_rl.training.reward import RewardShapingConfig, planet_capture_reward, ships_sent_reward
 
 
@@ -221,7 +223,6 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         self.reward_config = RewardShapingConfig()
         self.env: Any | None = None
         self.opponent_agent: Any | None = None
-        self._opponent_policy: Any | None = None
         self.obs: dict[str, Any] = {}
         self.sources: list[Planet] = []
         self.current_source_index = 0
@@ -234,10 +235,10 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         if seed is not None:
             self.seed_value = seed
         self.env = require_kaggle_env(debug=True) if self.require_kaggle else _FakeOrbitWarsBackend(self.seed_value)
-        self.opponent_agent = self._build_opponent_agent()
         reset = getattr(self.env, "reset", None)
         if callable(reset):
             reset()
+        self.opponent_agent = self._build_opponent_agent()
         self.obs = _extract_player_observation(self.env, self.candidate_player)
         self.turn_index = 0
         self.buffered_actions = []
@@ -288,11 +289,12 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         return self._advance_turn(self.buffered_actions, send_reward)
 
     def _advance_turn(self, candidate_actions: list, send_reward: float = 0.0):
-        assert self.env is not None
+        if self.env is None:
+            raise RuntimeError("reset() must be called before advancing a turn.")
+        if self.opponent_agent is None:
+            raise RuntimeError("reset() must build an opponent agent before advancing a turn.")
         opponent_player = 1 - self.candidate_player
         opponent_obs = _extract_player_observation(self.env, opponent_player)
-        if self.opponent_agent is None:
-            self.opponent_agent = self._build_opponent_agent()
         opponent_actions = self.opponent_agent.act(opponent_obs)
         actions0 = candidate_actions if self.candidate_player == 0 else opponent_actions
         actions1 = opponent_actions if self.candidate_player == 0 else candidate_actions
@@ -338,14 +340,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
     def _build_opponent_agent(self) -> Any:
         if self.opponent == "starter":
             return StarterAgent()
-        if self._opponent_policy is None:
-            from orbit_wars_rl.models.sb3_policy import SB3PolicyAdapter
-
-            assert self.opponent_model is not None
-            self._opponent_policy = SB3PolicyAdapter.load(self.opponent_model, device="cpu")
-        from orbit_wars_rl.agents.model_agent import ModelAgent
-
-        return ModelAgent(policy=self._opponent_policy)
+        return ModelAgent(policy=load_any_policy(self.opponent_model))
 
     def _rebuild_sources(self) -> None:
         planets = parse_planets(self.obs)
