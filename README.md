@@ -88,6 +88,16 @@ python scripts/train_model.py --out runs/models/bootstrap_policy.zip
 
 The v1 training command creates a valid 15→9 lightweight MLP policy artifact. It is intentionally a bootstrap artifact so core selection and visualization can be proven before investing in PPO/self-play.
 
+### PPO training against a saved opponent
+
+`--opponent starter` remains the default training opponent. To train PPO against a saved model opponent instead, pass `--opponent model` with the opponent artifact path:
+
+```bash
+python scripts/train_ppo.py --opponent model --opponent-model runs/models/ppo_orbit_wars.zip --out runs/models/ppo_vs_saved.zip
+```
+
+The opponent model is reloaded per episode so agent-side state starts cleanly each episode.
+
 ## Evaluate
 
 ```bash
