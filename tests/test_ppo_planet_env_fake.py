@@ -30,12 +30,41 @@ def test_fake_planet_step_env_loads_model_opponent(tmp_path):
     from orbit_wars_rl.models.policy import NumpyPolicy
 
     model_path = tmp_path / "policy.json"
-    NumpyPolicy.random(1).save(model_path)
+    saved_policy = NumpyPolicy.random(1)
+    saved_policy.save(model_path)
 
     env = OrbitWarsPlanetStepEnv(opponent="model", opponent_model=model_path, require_kaggle=False)
     env.reset(seed=123)
 
     assert isinstance(env.opponent_agent, ModelAgent)
+    assert env.opponent_agent.policy.predict([0.0] * 15) == saved_policy.predict([0.0] * 15)
+
+
+def test_fake_planet_step_env_wraps_loaded_policy_from_any_supported_artifact(monkeypatch, tmp_path):
+    from orbit_wars_rl.agents.model_agent import ModelAgent
+    from orbit_wars_rl.env import ppo_planet_env
+
+    class LoadedPolicy:
+        def predict(self, obs):
+            return [0.0] * 9
+
+    loaded_policy = LoadedPolicy()
+    model_path = tmp_path / "ppo_orbit_wars.zip"
+    model_path.write_text("placeholder")
+    calls = []
+
+    def fake_load_any_policy(path):
+        calls.append(path)
+        return loaded_policy
+
+    monkeypatch.setattr(ppo_planet_env, "load_any_policy", fake_load_any_policy)
+
+    env = OrbitWarsPlanetStepEnv(opponent="model", opponent_model=model_path, require_kaggle=False)
+    env.reset(seed=123)
+
+    assert calls == [model_path]
+    assert isinstance(env.opponent_agent, ModelAgent)
+    assert env.opponent_agent.policy is loaded_policy
 
 
 def test_fake_planet_step_env_requires_reset_opponent_agent_before_advancing():
