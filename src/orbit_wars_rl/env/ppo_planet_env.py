@@ -340,7 +340,8 @@ class OrbitWarsPlanetStepEnv(gym.Env):
     def _build_opponent_agent(self) -> Any:
         if self.opponent == "starter":
             return StarterAgent()
-        return ModelAgent(policy=load_any_policy(self.opponent_model))
+        loaded_policy = load_any_policy(self.opponent_model)
+        return ModelAgent(policy=loaded_policy)
 
     def _rebuild_sources(self) -> None:
         planets = parse_planets(self.obs)
