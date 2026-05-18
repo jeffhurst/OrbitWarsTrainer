@@ -9,6 +9,12 @@ def test_ppo_config_defaults_validate():
     cfg.validate()
     assert cfg.net_arch == (256, 256, 128)
     assert cfg.n_envs == 1
+    assert cfg.opponent_model is None
+
+
+def test_ppo_config_model_opponent_requires_model_path():
+    cfg = PPOTrainConfig(opponent="model", opponent_model="runs/models/some_model.zip")
+    cfg.validate()
 
 
 @pytest.mark.parametrize(
@@ -18,6 +24,8 @@ def test_ppo_config_defaults_validate():
         {"n_envs": 2},
         {"candidate_player": 2},
         {"opponent": "random"},
+        {"opponent": "starter", "opponent_model": "runs/models/some_model.zip"},
+        {"opponent": "model"},
         {"net_arch": ()},
         {"net_arch": (64, 0)},
     ],
