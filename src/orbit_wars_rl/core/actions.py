@@ -60,8 +60,10 @@ def decode_model_outputs(
 ) -> list[Action]:
     cfg = config or ActionDecodeConfig()
     output_len = len(outputs)
+    if output_len == 9:
+        output_len = 8
     if output_len not in (4, 8):
-        raise ValueError(f"expected 4 or 8 model outputs, got {output_len}")
+        raise ValueError(f"expected 4, 8, or 9 model outputs, got {len(outputs)}")
 
     remaining = max(0, int(source.ships) - max(0, cfg.reserve_ships))
     actions: list[Action] = []
