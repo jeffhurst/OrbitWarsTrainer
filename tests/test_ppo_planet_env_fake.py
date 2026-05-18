@@ -73,3 +73,30 @@ def test_fake_planet_step_env_requires_reset_opponent_agent_before_advancing():
 
     with pytest.raises(RuntimeError, match="opponent agent"):
         env._advance_turn([])
+
+
+def test_fake_planet_step_env_adds_early_win_terminal_bonus(monkeypatch):
+    from orbit_wars_rl.env import ppo_planet_env
+
+    def fake_step_kaggle_env(backend, actions_for_player0, actions_for_player1):
+        del actions_for_player0, actions_for_player1
+        backend.turn += 1
+        backend.obs["step"] = backend.turn
+        for planet in backend.obs["planets"]:
+            if int(planet[0]) == 2:
+                planet[1] = 0
+        backend.done = True
+
+    monkeypatch.setattr(ppo_planet_env, "_step_kaggle_env", fake_step_kaggle_env)
+    env = OrbitWarsPlanetStepEnv(require_kaggle=False, max_episode_turns=4)
+    env.reset(seed=123)
+
+    env.step([0.0] * 9)
+    _next_obs, reward, terminated, truncated, info = env.step([0.0] * 9)
+
+    assert terminated is True
+    assert truncated is False
+    assert info["terminal_reward"] == pytest.approx(25.0 + 75.0 * (3 / 4))
+    assert reward == pytest.approx(
+        info["production_delta"] + info["capture_reward"] + info["send_reward"] + info["terminal_reward"]
+    )
