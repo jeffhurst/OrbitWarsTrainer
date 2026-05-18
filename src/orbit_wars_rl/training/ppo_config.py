@@ -15,14 +15,14 @@ class PPOTrainConfig:
     n_envs: int = 1
 
     # PPO hyperparameters.
-    learning_rate: float = 3e-4
+    learning_rate: float = 3e-5
     n_steps: int = 2048
     batch_size: int = 64
-    n_epochs: int = 10
+    n_epochs: int = 3
     gamma: float = 0.99
     gae_lambda: float = 0.95
-    clip_range: float = 0.2
-    ent_coef: float = 0.0
+    clip_range: float = 0.1
+    ent_coef: float = 0.01
     vf_coef: float = 0.5
     max_grad_norm: float = 0.5
 

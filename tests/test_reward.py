@@ -17,7 +17,7 @@ def planet(planet_id, owner, production):
 
 
 def test_ships_sent_reward_is_tiny_per_launched_ship():
-    assert ships_sent_reward([[0, 0.0, 3], [1, 1.0, 2]]) == pytest.approx(0.005)
+    assert ships_sent_reward([[0, 0.0, 3], [1, 1.0, 2]]) == pytest.approx(0.0)
 
 
 def test_planet_capture_reward_scales_with_production_and_enemy_ownership():

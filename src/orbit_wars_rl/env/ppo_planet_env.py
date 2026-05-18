@@ -52,8 +52,14 @@ except Exception:  # pragma: no cover - exercised only in minimal installations.
             high = 1.0 if self.high == np.inf else self.high
             return np.full(self.shape, (low + high) / 2.0, dtype=self.dtype)
 
+    class _MultiDiscrete:
+        def __init__(self, nvec):
+            self.nvec = nvec
+            self.shape = (len(nvec),)
+
     class _Spaces:
         Box = _Box
+        MultiDiscrete = _MultiDiscrete
 
     class _Env:
         pass
@@ -79,6 +85,8 @@ from orbit_wars_rl.training.reward import (
     game_outcome_reward,
     planet_capture_reward,
     player_score,
+    production_advantage,
+    score_advantage,
     ships_sent_reward,
 )
 
@@ -196,7 +204,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
 
     metadata = {"render_modes": []}
     observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(15,), dtype=np.float32)
-    action_space = spaces.Box(low=0.0, high=1.0, shape=(9,), dtype=np.float32)
+    action_space = spaces.MultiDiscrete([6, 6, 6, 6])
 
     def __init__(
         self,
@@ -305,6 +313,8 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         actions0 = candidate_actions if self.candidate_player == 0 else opponent_actions
         actions1 = opponent_actions if self.candidate_player == 0 else candidate_actions
         production_before = self.previous_total_production
+        prod_adv_before = production_advantage(self.obs, self.candidate_player)
+        score_adv_before = score_advantage(self.obs, self.candidate_player)
         planets_before = parse_planets(self.obs)
         _step_kaggle_env(self.env, actions0, actions1)
         self.turn_index += 1
@@ -312,10 +322,14 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         planets_after = parse_planets(self.obs)
         current_total = total_production(planets_after, self.candidate_player)
         production_delta = float(current_total - production_before)
+        prod_adv_after = production_advantage(self.obs, self.candidate_player)
+        score_adv_after = score_advantage(self.obs, self.candidate_player)
+        prod_adv_delta = prod_adv_after - prod_adv_before
+        score_adv_delta = score_adv_after - score_adv_before
         capture_reward = planet_capture_reward(
             planets_before, planets_after, self.candidate_player, self.reward_config
         )
-        reward = float(production_delta + capture_reward + send_reward)
+        reward = float(1.0 * prod_adv_delta + 0.02 * score_adv_delta + capture_reward + send_reward)
         terminal_reward = 0.0
         self.previous_total_production = current_total
         buffered = list(candidate_actions)
@@ -351,6 +365,12 @@ class OrbitWarsPlanetStepEnv(gym.Env):
                 "buffered_actions": buffered,
                 "turn_index": self.turn_index,
                 "source_id": self._current_source_id(),
+                "production_advantage_before": prod_adv_before,
+                "production_advantage": prod_adv_after,
+                "production_advantage_delta": prod_adv_delta,
+                "score_advantage_before": score_adv_before,
+                "score_advantage": score_adv_after,
+                "score_advantage_delta": score_adv_delta,
             },
         )
 

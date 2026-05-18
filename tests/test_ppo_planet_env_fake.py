@@ -8,21 +8,27 @@ def test_fake_planet_step_env_shapes_and_production_delta_reward():
     obs, info = env.reset(seed=123)
     assert obs.shape == (15,)
     assert info["source_id"] == 0
-    assert env.action_space.shape == (9,)
+    assert env.action_space.shape == (4,)
 
-    next_obs, reward, terminated, truncated, info = env.step([0.0] * 9)
+    next_obs, reward, terminated, truncated, info = env.step([0] * 4)
     assert next_obs.shape == (15,)
     assert reward == 0.0
     assert terminated is False
     assert truncated is False
     assert info["turn_advanced"] is False
 
-    next_obs, reward, terminated, truncated, info = env.step([0.0] * 9)
+    next_obs, reward, terminated, truncated, info = env.step([0] * 4)
     assert next_obs.shape == (15,)
     assert info["turn_advanced"] is True
     assert info["production_delta"] == info["production_after"] - info["production_before"]
     assert info["capture_reward"] == pytest.approx(0.5)
-    assert reward == pytest.approx(info["production_delta"] + info["capture_reward"] + info["send_reward"])
+    assert reward == pytest.approx(
+        1.0 * info["production_advantage_delta"] +
+        0.02 * info["score_advantage_delta"] +
+        info["capture_reward"] +
+        info["send_reward"] +
+        info["terminal_reward"]
+    )
 
 
 def test_fake_planet_step_env_loads_model_opponent(tmp_path):
@@ -46,7 +52,7 @@ def test_fake_planet_step_env_wraps_loaded_policy_from_any_supported_artifact(mo
 
     class LoadedPolicy:
         def predict(self, obs):
-            return [0.0] * 9
+            return [0] * 4
 
     loaded_policy = LoadedPolicy()
     model_path = tmp_path / "ppo_orbit_wars.zip"
@@ -91,14 +97,14 @@ def test_fake_planet_step_env_adds_early_win_terminal_bonus(monkeypatch):
     env = OrbitWarsPlanetStepEnv(require_kaggle=False, max_episode_turns=4)
     env.reset(seed=123)
 
-    env.step([0.0] * 9)
-    _next_obs, reward, terminated, truncated, info = env.step([0.0] * 9)
+    env.step([0] * 4)
+    _next_obs, reward, terminated, truncated, info = env.step([0] * 4)
 
     assert terminated is True
     assert truncated is False
     assert info["terminal_reward"] == pytest.approx(25.0 + 75.0 * (3 / 4))
     assert reward == pytest.approx(
-        info["production_delta"] + info["capture_reward"] + info["send_reward"] + info["terminal_reward"]
+        1.0 * info["production_advantage_delta"] + 0.02 * info["score_advantage_delta"] + info["capture_reward"] + info["send_reward"] + info["terminal_reward"]
     )
 
 
@@ -124,5 +130,5 @@ def test_fake_planet_step_env_adds_ship_score_terminal_bonus_on_truncation(monke
     assert truncated is True
     assert info["terminal_reward"] == pytest.approx(25.0)
     assert reward == pytest.approx(
-        info["production_delta"] + info["capture_reward"] + info["send_reward"] + info["terminal_reward"]
+        1.0 * info["production_advantage_delta"] + 0.02 * info["score_advantage_delta"] + info["capture_reward"] + info["send_reward"] + info["terminal_reward"]
     )
