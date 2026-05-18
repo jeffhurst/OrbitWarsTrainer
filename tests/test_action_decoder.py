@@ -107,3 +107,16 @@ def test_discrete_multitarget_weights():
     assert len(actions) == 2
     assert sum(a.num_ships for a in actions) <= 20
     assert all(a.num_ships > 0 for a in actions)
+
+
+def test_legacy_nine_output_vector_remains_supported():
+    src = planet(0, 0, 0, ships=10)
+    targets = [planet(1, 10, 0)]
+    actions = decode_model_outputs(
+        src,
+        targets,
+        [0.51, 0.5, 0, 0, 0, 0, 0, 0, 0.25],
+        ActionDecodeConfig(reserve_ships=1),
+    )
+    assert len(actions) == 1
+    assert actions[0].num_ships == 5
