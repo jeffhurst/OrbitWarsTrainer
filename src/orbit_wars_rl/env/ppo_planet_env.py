@@ -74,7 +74,13 @@ from orbit_wars_rl.core.planets import total_production
 from orbit_wars_rl.core.types import Planet, parse_planets, rows
 from orbit_wars_rl.env.kaggle_env import require_kaggle_env
 from orbit_wars_rl.models.save_load import load_any_policy
-from orbit_wars_rl.training.reward import RewardShapingConfig, planet_capture_reward, ships_sent_reward
+from orbit_wars_rl.training.reward import (
+    RewardShapingConfig,
+    game_outcome_reward,
+    planet_capture_reward,
+    player_score,
+    ships_sent_reward,
+)
 
 
 class _FakeOrbitWarsBackend:
@@ -310,6 +316,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
             planets_before, planets_after, self.candidate_player, self.reward_config
         )
         reward = float(production_delta + capture_reward + send_reward)
+        terminal_reward = 0.0
         self.previous_total_production = current_total
         buffered = list(candidate_actions)
         self.buffered_actions = []
@@ -319,6 +326,15 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         opponent_has_planets = any(p.owner == opponent_player for p in planets)
         terminated = _is_kaggle_done(self.env) or not candidate_has_planets or not opponent_has_planets
         truncated = self.turn_index >= self.max_episode_turns
+        if terminated:
+            terminal_reward = game_outcome_reward(
+                candidate_score=player_score(self.obs, self.candidate_player),
+                opponent_score=player_score(self.obs, opponent_player),
+                turn_index=self.turn_index,
+                max_episode_turns=self.max_episode_turns,
+                config=self.reward_config,
+            )
+            reward = float(reward + terminal_reward)
         return (
             self._current_obs(),
             reward,
@@ -331,6 +347,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
                 "production_delta": production_delta,
                 "capture_reward": capture_reward,
                 "send_reward": send_reward,
+                "terminal_reward": terminal_reward,
                 "buffered_actions": buffered,
                 "turn_index": self.turn_index,
                 "source_id": self._current_source_id(),
