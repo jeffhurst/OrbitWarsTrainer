@@ -49,7 +49,16 @@ class EpisodeComponentLogger(BaseCallback):
                 "action/self_target_rate",
             ]
             print("[episode]")
+            matched = False
             for key in ordered_keys:
                 if key in episode:
                     print(f"  {key}: {float(episode[key]):.4f}")
+                    matched = True
+            if not matched:
+                for key in sorted(episode):
+                    value = episode[key]
+                    if isinstance(value, (int, float)):
+                        print(f"  {key}: {float(value):.4f}")
+                    else:
+                        print(f"  {key}: {value}")
         return True
