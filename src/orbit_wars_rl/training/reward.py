@@ -41,6 +41,8 @@ class RewardShapingConfig:
     idle_ship_ratio_threshold: float = 0.60
     idle_ship_penalty: float = 8.0
     min_pressure_ratio_for_no_idle_penalty: float = 0.10
+    dense_reward_clip: float = 2.0
+    reward_scale: float = 0.1
 
 
 def _safe_float(value: Any, default: float = 0.0) -> float:

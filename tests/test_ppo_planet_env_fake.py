@@ -22,13 +22,7 @@ def test_fake_planet_step_env_shapes_and_production_delta_reward():
     assert info["turn_advanced"] is True
     assert info["production_delta"] == info["production_after"] - info["production_before"]
     assert info["capture_reward"] == pytest.approx(40.0)
-    assert reward == pytest.approx(
-        info["strategic_score_delta"] +
-        info["capture_reward"] +
-        info["send_reward"] +
-        info["passive_penalty"] +
-        info["terminal_reward"]
-    )
+    assert reward == pytest.approx(info["reward_total"])
 
 
 def test_fake_planet_step_env_loads_model_opponent(tmp_path):
@@ -103,9 +97,7 @@ def test_fake_planet_step_env_adds_early_win_terminal_bonus(monkeypatch):
     assert terminated is True
     assert truncated is False
     assert info["terminal_reward"] == pytest.approx(1000.0 + 300.0 * (3 / 4))
-    assert reward == pytest.approx(
-        info["strategic_score_delta"] + info["capture_reward"] + info["send_reward"] + info["passive_penalty"] + info["terminal_reward"]
-    )
+    assert reward == pytest.approx(info["reward_total"])
 
 
 def test_fake_planet_step_env_adds_ship_score_terminal_bonus_on_truncation(monkeypatch):
@@ -129,6 +121,4 @@ def test_fake_planet_step_env_adds_ship_score_terminal_bonus_on_truncation(monke
     assert terminated is False
     assert truncated is True
     assert -100.0 <= info["terminal_reward"] <= 100.0
-    assert reward == pytest.approx(
-        info["strategic_score_delta"] + info["capture_reward"] + info["send_reward"] + info["passive_penalty"] + info["terminal_reward"]
-    )
+    assert reward == pytest.approx(info["reward_total"])
