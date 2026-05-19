@@ -15,13 +15,13 @@ class PPOTrainConfig:
     n_envs: int = 1
 
     # PPO hyperparameters.
-    learning_rate: float = 3e-5
-    n_steps: int = 2048
-    batch_size: int = 64
-    n_epochs: int = 3
-    gamma: float = 0.99
+    learning_rate: float = 1e-4
+    n_steps: int = 4096
+    batch_size: int = 256
+    n_epochs: int = 5
+    gamma: float = 0.995
     gae_lambda: float = 0.95
-    clip_range: float = 0.1
+    clip_range: float = 0.2
     ent_coef: float = 0.01
     vf_coef: float = 0.5
     max_grad_norm: float = 0.5
@@ -33,7 +33,7 @@ class PPOTrainConfig:
     opponent: str = "starter"
     opponent_model: str | Path | None = None
     candidate_player: int = 0
-    max_episode_turns: int = 400
+    max_episode_turns: int = 500
     require_kaggle: bool = True
 
     # Logging.
