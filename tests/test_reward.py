@@ -1,89 +1,59 @@
 import pytest
 
-from orbit_wars_rl.core.planets import total_production
-from orbit_wars_rl.core.types import Planet, parse_planets
+from orbit_wars_rl.core.types import Planet
 from orbit_wars_rl.training.reward import (
     RewardShapingConfig,
     game_outcome_reward,
     planet_capture_reward,
-    player_score,
-    ships_sent_reward,
-    win_speed_bonus,
+    strategic_score,
+    timeout_outcome_reward,
 )
 
 
-def planet(planet_id, owner, production):
-    return Planet(planet_id, owner, 0.0, 0.0, 1.0, 10, production)
+def planet(planet_id, owner, ships, production):
+    return Planet(planet_id, owner, 0.0, 0.0, 1.0, ships, production)
 
 
-def test_ships_sent_reward_is_tiny_per_launched_ship():
-    assert ships_sent_reward([[0, 0.0, 3], [1, 1.0, 2]]) == pytest.approx(0.0)
+def test_win_reward_is_strongly_positive_and_faster_is_better():
+    cfg = RewardShapingConfig()
+    early = game_outcome_reward(candidate_score=100, opponent_score=10, turn_index=10, max_episode_turns=100, config=cfg)
+    late = game_outcome_reward(candidate_score=100, opponent_score=10, turn_index=90, max_episode_turns=100, config=cfg)
+    assert early > 1000
+    assert late > 1000
+    assert early > late
 
 
-def test_planet_capture_reward_scales_with_production_and_enemy_ownership():
-    before = [planet(1, -1, 5.0), planet(2, 1, 7.0)]
-    after = [planet(1, 0, 5.0), planet(2, 0, 7.0)]
-
-    reward = planet_capture_reward(before, after, player=0)
-
-    assert reward == pytest.approx(5.0 * 0.10 + 7.0 * 0.50)
-
-
-def test_planet_capture_reward_penalizes_losing_production():
-    cfg = RewardShapingConfig(loss_production_penalty=0.25)
-    before = [planet(1, 0, 6.0)]
-    after = [planet(1, 1, 6.0)]
-
-    reward = planet_capture_reward(before, after, player=0, config=cfg)
-
-    assert reward == pytest.approx(-1.5)
+def test_loss_reward_is_strongly_negative_and_slow_loss_is_less_negative():
+    cfg = RewardShapingConfig()
+    early = game_outcome_reward(candidate_score=10, opponent_score=100, turn_index=10, max_episode_turns=100, config=cfg)
+    late = game_outcome_reward(candidate_score=10, opponent_score=100, turn_index=90, max_episode_turns=100, config=cfg)
+    assert early < -700
+    assert late < 0
+    assert early < late
 
 
-def test_win_speed_bonus_is_larger_for_earlier_wins():
-    cfg = RewardShapingConfig(win_base_bonus=20.0, fastest_win_bonus=80.0)
-
-    early_bonus = win_speed_bonus(turn_index=10, max_episode_turns=100, config=cfg)
-    late_bonus = win_speed_bonus(turn_index=90, max_episode_turns=100, config=cfg)
-
-    assert early_bonus == pytest.approx(92.0)
-    assert late_bonus == pytest.approx(28.0)
-    assert early_bonus > late_bonus
+def test_timeout_reward_bounded_small():
+    cfg = RewardShapingConfig()
+    reward = timeout_outcome_reward(120, 100, cfg)
+    assert -100.0 <= reward <= 100.0
 
 
-def test_game_outcome_reward_adds_scaled_win_bonus_and_static_loss_penalty():
-    cfg = RewardShapingConfig(win_base_bonus=20.0, fastest_win_bonus=80.0, loss_game_penalty=7.0)
-
-    assert game_outcome_reward(
-        candidate_score=50,
-        opponent_score=0,
-        turn_index=25,
-        max_episode_turns=100,
-        config=cfg,
-    ) == pytest.approx(80.0)
-    assert game_outcome_reward(
-        candidate_score=0,
-        opponent_score=50,
-        turn_index=25,
-        max_episode_turns=100,
-        config=cfg,
-    ) == pytest.approx(-7.0)
-    assert game_outcome_reward(
-        candidate_score=50,
-        opponent_score=50,
-        turn_index=25,
-        max_episode_turns=100,
-        config=cfg,
-    ) == pytest.approx(0.0)
+def test_capture_enemy_more_than_neutral():
+    before = [planet(1, -1, 10, 5.0), planet(2, 1, 10, 5.0)]
+    after_enemy = [planet(1, -1, 10, 5.0), planet(2, 0, 10, 5.0)]
+    after_neutral = [planet(1, 0, 10, 5.0), planet(2, 1, 10, 5.0)]
+    enemy_reward = planet_capture_reward(before, after_enemy, player=0)
+    neutral_reward = planet_capture_reward(before, after_neutral, player=0)
+    assert enemy_reward > neutral_reward
 
 
-def test_player_score_uses_ship_count_when_production_winner_differs():
-    obs = {
-        "planets": [
-            [0, 0, 0.0, 0.0, 1.0, 100, 1.0],
-            [1, 1, 0.0, 0.0, 1.0, 1, 50.0],
-        ],
-        "fleets": [[0, 1, 0.0, 0.0, 0.0, 1, 5]],
-    }
+def test_strategic_score_favors_production_and_planets_over_ships_alone():
+    base = {"planets": [[0, 0, 0.0, 0.0, 1.0, 10, 1.0], [1, 1, 0.0, 0.0, 1.0, 10, 1.0]], "fleets": []}
+    prod_gain = {"planets": [[0, 0, 0.0, 0.0, 1.0, 10, 4.0], [1, 1, 0.0, 0.0, 1.0, 10, 1.0]], "fleets": []}
+    ship_gain = {"planets": [[0, 0, 0.0, 0.0, 1.0, 40, 1.0], [1, 1, 0.0, 0.0, 1.0, 10, 1.0]], "fleets": []}
+    base_score = strategic_score(base, 0)
+    assert strategic_score(prod_gain, 0) - base_score > strategic_score(ship_gain, 0) - base_score
 
-    assert total_production(parse_planets(obs), 0) < total_production(parse_planets(obs), 1)
-    assert player_score(obs, 0) > player_score(obs, 1)
+
+def test_missing_data_does_not_crash_reward_calculation():
+    assert strategic_score({}, 0) == pytest.approx(0.0)
