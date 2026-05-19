@@ -83,11 +83,14 @@ from orbit_wars_rl.models.save_load import load_any_policy
 from orbit_wars_rl.training.reward import (
     RewardShapingConfig,
     game_outcome_reward,
+    idle_ship_penalty,
     planet_capture_reward,
     player_score,
     production_advantage,
     score_advantage,
     ships_sent_reward,
+    strategic_score,
+    timeout_outcome_reward,
 )
 
 
@@ -315,6 +318,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         production_before = self.previous_total_production
         prod_adv_before = production_advantage(self.obs, self.candidate_player)
         score_adv_before = score_advantage(self.obs, self.candidate_player)
+        strategic_before = strategic_score(self.obs, self.candidate_player, self.reward_config)
         planets_before = parse_planets(self.obs)
         _step_kaggle_env(self.env, actions0, actions1)
         self.turn_index += 1
@@ -324,12 +328,15 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         production_delta = float(current_total - production_before)
         prod_adv_after = production_advantage(self.obs, self.candidate_player)
         score_adv_after = score_advantage(self.obs, self.candidate_player)
+        strategic_after = strategic_score(self.obs, self.candidate_player, self.reward_config)
         prod_adv_delta = prod_adv_after - prod_adv_before
         score_adv_delta = score_adv_after - score_adv_before
+        strategic_delta = strategic_after - strategic_before
         capture_reward = planet_capture_reward(
             planets_before, planets_after, self.candidate_player, self.reward_config
         )
-        reward = float(1.0 * prod_adv_delta + 0.02 * score_adv_delta + capture_reward + send_reward)
+        passive_penalty = idle_ship_penalty(self.obs, self.candidate_player, self.reward_config)
+        reward = float(strategic_delta + capture_reward + send_reward + passive_penalty)
         terminal_reward = 0.0
         self.previous_total_production = current_total
         buffered = list(candidate_actions)
@@ -341,13 +348,18 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         terminated = _is_kaggle_done(self.env) or not candidate_has_planets or not opponent_has_planets
         truncated = self.turn_index >= self.max_episode_turns
         if terminated or truncated:
-            terminal_reward = game_outcome_reward(
-                candidate_score=player_score(self.obs, self.candidate_player),
-                opponent_score=player_score(self.obs, opponent_player),
-                turn_index=self.turn_index,
-                max_episode_turns=self.max_episode_turns,
-                config=self.reward_config,
-            )
+            candidate_score = player_score(self.obs, self.candidate_player)
+            opponent_score = player_score(self.obs, opponent_player)
+            if truncated and not terminated:
+                terminal_reward = timeout_outcome_reward(candidate_score, opponent_score, self.reward_config)
+            else:
+                terminal_reward = game_outcome_reward(
+                    candidate_score=candidate_score,
+                    opponent_score=opponent_score,
+                    turn_index=self.turn_index,
+                    max_episode_turns=self.max_episode_turns,
+                    config=self.reward_config,
+                )
             reward = float(reward + terminal_reward)
         return (
             self._current_obs(),
@@ -371,6 +383,10 @@ class OrbitWarsPlanetStepEnv(gym.Env):
                 "score_advantage_before": score_adv_before,
                 "score_advantage": score_adv_after,
                 "score_advantage_delta": score_adv_delta,
+                "strategic_score_before": strategic_before,
+                "strategic_score": strategic_after,
+                "strategic_score_delta": strategic_delta,
+                "passive_penalty": passive_penalty,
             },
         )
 
