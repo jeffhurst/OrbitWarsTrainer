@@ -450,7 +450,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
                 "reward_scale": self.reward_config.reward_scale,
                 "reward_unscaled_total": reward,
                 "reward_total": scaled_reward,
-                "episode": {
+                "episode_components": {
                     "reward/terminal": terminal_reward,
                     "reward/strategic_delta": strategic_delta,
                     "reward/capture": capture_reward,

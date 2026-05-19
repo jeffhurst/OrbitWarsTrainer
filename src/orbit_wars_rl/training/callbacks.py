@@ -23,7 +23,9 @@ class EpisodeComponentLogger(BaseCallback):
         if not hasattr(self, "locals") or not hasattr(self, "logger"):
             return True
         for info in self.locals.get("infos", []):
-            episode = info.get("episode") if isinstance(info, dict) else None
+            if not isinstance(info, dict):
+                continue
+            episode = info.get("episode_components") or info.get("episode")
             if not episode:
                 continue
             for key, value in episode.items():
