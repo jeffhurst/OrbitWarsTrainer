@@ -309,6 +309,17 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         decoded_rows = rows(decoded)
         self.episode_action_count += 1
         self.episode_ships_sent_total += float(sum(float(row[2]) for row in decoded_rows if len(row) >= 3))
+        action_values = np.asarray(action, dtype=np.float32).reshape(-1).tolist()
+        for idx, value in enumerate(action_values[: min(len(chosen), 4)]):
+            if int(value) <= 0:
+                continue
+            target = chosen[idx]
+            if target.owner == (1 - self.candidate_player):
+                self.episode_enemy_target_count += 1
+            elif target.owner < 0:
+                self.episode_neutral_target_count += 1
+            elif target.owner == self.candidate_player:
+                self.episode_self_target_count += 1
         if not decoded_rows:
             self.episode_invalid_action_count += 1
         send_reward = ships_sent_reward(decoded_rows, self.reward_config)
