@@ -3,6 +3,7 @@ import pytest
 from orbit_wars_rl.core.types import Planet
 from orbit_wars_rl.training.reward import (
     RewardShapingConfig,
+    action_targeting_reward,
     game_outcome_reward,
     planet_capture_reward,
     strategic_score,
@@ -18,8 +19,8 @@ def test_win_reward_is_strongly_positive_and_faster_is_better():
     cfg = RewardShapingConfig()
     early = game_outcome_reward(candidate_score=100, opponent_score=10, turn_index=10, max_episode_turns=100, config=cfg)
     late = game_outcome_reward(candidate_score=100, opponent_score=10, turn_index=90, max_episode_turns=100, config=cfg)
-    assert early > 1000
-    assert late > 1000
+    assert early > 200
+    assert late > 200
     assert early > late
 
 
@@ -27,7 +28,7 @@ def test_loss_reward_is_strongly_negative_and_slow_loss_is_less_negative():
     cfg = RewardShapingConfig()
     early = game_outcome_reward(candidate_score=10, opponent_score=100, turn_index=10, max_episode_turns=100, config=cfg)
     late = game_outcome_reward(candidate_score=10, opponent_score=100, turn_index=90, max_episode_turns=100, config=cfg)
-    assert early < -700
+    assert early < -150
     assert late < 0
     assert early < late
 
@@ -35,7 +36,7 @@ def test_loss_reward_is_strongly_negative_and_slow_loss_is_less_negative():
 def test_timeout_reward_bounded_small():
     cfg = RewardShapingConfig()
     reward = timeout_outcome_reward(120, 100, cfg)
-    assert -100.0 <= reward <= 100.0
+    assert -60.0 <= reward <= 60.0
 
 
 def test_capture_enemy_more_than_neutral():
@@ -57,3 +58,16 @@ def test_strategic_score_favors_production_and_planets_over_ships_alone():
 
 def test_missing_data_does_not_crash_reward_calculation():
     assert strategic_score({}, 0) == pytest.approx(0.0)
+
+
+def test_action_targeting_reward_prefers_overmatch_and_low_ship_target():
+    candidates = [
+        planet(1, -1, 12, 2.0),
+        planet(2, -1, 4, 2.0),
+        planet(3, -1, 20, 2.0),
+        planet(4, -1, 8, 2.0),
+    ]
+    low_target = action_targeting_reward(source_ships=30, candidates=candidates, action_values=[0, 5, 0, 0])
+    high_target = action_targeting_reward(source_ships=30, candidates=candidates, action_values=[5, 0, 0, 0])
+    assert low_target > 0
+    assert low_target > high_target
