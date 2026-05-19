@@ -89,6 +89,7 @@ from orbit_wars_rl.training.reward import (
     player_score,
     production_advantage,
     score_advantage,
+    action_targeting_reward,
     ships_sent_reward,
     strategic_score,
     timeout_outcome_reward,
@@ -323,6 +324,13 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         if not decoded_rows:
             self.episode_invalid_action_count += 1
         send_reward = ships_sent_reward(decoded_rows, self.reward_config)
+        send_reward += action_targeting_reward(
+            source_ships=int(source.ships),
+            candidates=chosen,
+            action_values=action_values,
+            config=self.reward_config,
+            reserve_ships=self.action_config.reserve_ships,
+        )
         self.buffered_actions.extend(decoded_rows)
         self.current_source_index += 1
         if self.current_source_index < len(self.sources):
@@ -354,6 +362,9 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         score_adv_before = score_advantage(self.obs, self.candidate_player)
         pressure_before = fleet_pressure_advantage(self.obs, self.candidate_player)
         strategic_before = strategic_score(self.obs, self.candidate_player, self.reward_config)
+        ship_score_before = player_score(self.obs, self.candidate_player)
+        enemy_ship_score_before = player_score(self.obs, opponent_player)
+        ship_adv_before = ship_score_before - enemy_ship_score_before
         planets_before = parse_planets(self.obs)
         _step_kaggle_env(self.env, actions0, actions1)
         self.turn_index += 1
@@ -365,6 +376,9 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         score_adv_after = score_advantage(self.obs, self.candidate_player)
         pressure_after = fleet_pressure_advantage(self.obs, self.candidate_player)
         strategic_after = strategic_score(self.obs, self.candidate_player, self.reward_config)
+        ship_score_after = player_score(self.obs, self.candidate_player)
+        enemy_ship_score_after = player_score(self.obs, opponent_player)
+        ship_adv_after = ship_score_after - enemy_ship_score_after
         prod_adv_delta = prod_adv_after - prod_adv_before
         score_adv_delta = score_adv_after - score_adv_before
         strategic_delta = strategic_after - strategic_before
@@ -380,7 +394,13 @@ class OrbitWarsPlanetStepEnv(gym.Env):
                 elif before.owner < 0:
                     self.episode_neutral_captures += 1
         passive_penalty = idle_ship_penalty(self.obs, self.candidate_player, self.reward_config)
-        dense_reward = float(strategic_delta + pressure_delta + send_reward)
+        enemy_captured = sum(1 for before in planets_before for after in planets_after if before.id == after.id and before.owner == self.candidate_player and after.owner == opponent_player)
+        we_captured = sum(1 for before in planets_before for after in planets_after if before.id == after.id and before.owner != self.candidate_player and after.owner == self.candidate_player)
+        net_capture_delta = we_captured - enemy_captured
+        ship_delta_reward = self.reward_config.ship_delta_weight * ((ship_score_after - enemy_ship_score_after) / max(1.0, ship_score_after + enemy_ship_score_after))
+        production_delta_reward = self.reward_config.production_delta_weight * prod_adv_after
+        capture_delta_reward = self.reward_config.net_capture_weight * net_capture_delta
+        dense_reward = float(strategic_delta + pressure_delta + ship_delta_reward + production_delta_reward + capture_delta_reward + send_reward)
         clip = self.reward_config.dense_reward_clip
         dense_reward = float(max(-clip, min(clip, dense_reward)))
         num_owned_planets = max(1, sum(1 for p in planets_before if p.owner == self.candidate_player))
@@ -443,6 +463,13 @@ class OrbitWarsPlanetStepEnv(gym.Env):
                 "strategic_score": strategic_after,
                 "strategic_score_delta": strategic_delta,
                 "pressure_delta": pressure_delta,
+                "ship_advantage_before": ship_adv_before,
+                "ship_advantage": ship_adv_after,
+                "ship_delta_reward": ship_delta_reward,
+                "production_delta_reward": production_delta_reward,
+                "capture_delta_reward": capture_delta_reward,
+                "enemy_planets_captured_us": enemy_captured,
+                "our_planets_captured": we_captured,
                 "passive_penalty": passive_penalty,
                 "dense_reward": dense_reward,
                 "team_reward": team_reward,
@@ -455,6 +482,9 @@ class OrbitWarsPlanetStepEnv(gym.Env):
                     "reward/strategic_delta": strategic_delta,
                     "reward/capture": capture_reward,
                     "reward/pressure": pressure_delta,
+                    "reward/ship_delta": ship_delta_reward,
+                    "reward/production_delta": production_delta_reward,
+                    "reward/capture_delta": capture_delta_reward,
                     "reward/local_action": send_reward,
                     "reward/waste_penalty": passive_penalty,
                     "reward/total": scaled_reward,

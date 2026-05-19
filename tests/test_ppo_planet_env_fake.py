@@ -96,7 +96,7 @@ def test_fake_planet_step_env_adds_early_win_terminal_bonus(monkeypatch):
 
     assert terminated is True
     assert truncated is False
-    assert info["terminal_reward"] == pytest.approx(1000.0 + 300.0 * (3 / 4))
+    assert info["terminal_reward"] == pytest.approx(240.0 + 80.0 * (3 / 4))
     assert reward == pytest.approx(info["reward_total"])
 
 

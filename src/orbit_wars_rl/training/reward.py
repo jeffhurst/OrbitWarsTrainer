@@ -1,10 +1,10 @@
 """Aggressive but stable team-level reward utilities.
 
 Reward philosophy:
-- Terminal outcomes dominate all shaping.
-- Dense shaping rewards state improvements (deltas), not static advantage.
-- Captures and pressure are rewarded when they improve winning chances.
-- Local per-source action shaping is tiny compared to team rewards.
+- Dense per-turn deltas are primary.
+- Capturing planets is strongly positive; losing planets is strongly negative.
+- Current ship and production advantages should be reinforced each turn.
+- Terminal rewards exist, but are intentionally less dominant.
 """
 from __future__ import annotations
 
@@ -18,25 +18,27 @@ from orbit_wars_rl.core.types import Planet, parse_fleets, parse_planets
 class RewardShapingConfig:
     """Configurable constants for aggressive reward shaping."""
 
-    win_reward: float = 1000.0
-    loss_penalty: float = -1000.0
-    timeout_min_reward: float = -100.0
-    timeout_max_reward: float = 100.0
-    fast_win_bonus: float = 300.0
+    win_reward: float = 240.0
+    loss_penalty: float = -240.0
+    timeout_min_reward: float = -60.0
+    timeout_max_reward: float = 60.0
+    fast_win_bonus: float = 80.0
 
-    production_adv_weight: float = 80.0
-    planet_adv_weight: float = 50.0
-    ship_adv_weight: float = 25.0
-    pressure_adv_weight: float = 20.0
+    production_adv_weight: float = 55.0
+    planet_adv_weight: float = 55.0
+    ship_adv_weight: float = 45.0
+    pressure_adv_weight: float = 15.0
+    ship_delta_weight: float = 120.0
+    production_delta_weight: float = 85.0
+    net_capture_weight: float = 28.0
 
     enemy_capture_reward: float = 30.0
     neutral_capture_reward: float = 15.0
     captured_production_weight: float = 5.0
 
-    local_action_weight: float = 0.05
-    successful_enemy_target_bonus: float = 1.0
-    valuable_neutral_target_bonus: float = 0.6
-    suicidal_attack_penalty: float = 1.2
+    local_action_weight: float = 1.0
+    send_overmatch_bonus: float = 2.0
+    low_ship_target_bonus: float = 0.5
 
     idle_ship_ratio_threshold: float = 0.60
     idle_ship_penalty: float = 8.0
@@ -120,9 +122,41 @@ def strategic_score(obs: dict, player: int, config: RewardShapingConfig | None =
 
 
 def ships_sent_reward(actions: Iterable, config: RewardShapingConfig | None = None) -> float:
-    # Preserved for compatibility; aggressive reward does not directly reward sending ships.
-    del actions, config
-    return 0.0
+    del actions
+    cfg = config or RewardShapingConfig()
+    return 0.0 * cfg.local_action_weight
+
+
+def action_targeting_reward(
+    source_ships: int,
+    candidates: Iterable[Planet],
+    action_values: Iterable[float],
+    config: RewardShapingConfig | None = None,
+    reserve_ships: int = 1,
+) -> float:
+    cfg = config or RewardShapingConfig()
+    candidate_list = list(candidates)[:4]
+    values = [max(0, min(5, int(v))) for v in list(action_values)[: len(candidate_list)]]
+    if not candidate_list or not any(values):
+        return 0.0
+    weights = [0.0, 0.05, 0.15, 0.30, 0.50, 1.00]
+    chosen_weights = [weights[v] for v in values]
+    total_weight = sum(chosen_weights)
+    if total_weight <= 0.0:
+        return 0.0
+    remaining = max(0, int(source_ships) - max(0, int(reserve_ships)))
+    lowest_ship_count = min(int(p.ships) for p in candidate_list)
+    reward = 0.0
+    for idx, weight in enumerate(chosen_weights):
+        if weight <= 0.0:
+            continue
+        ships_sent = int((remaining * weight) // total_weight)
+        target_ships = int(candidate_list[idx].ships)
+        if ships_sent > target_ships:
+            reward += cfg.send_overmatch_bonus
+        if target_ships == lowest_ship_count:
+            reward += cfg.low_ship_target_bonus
+    return float(reward * cfg.local_action_weight)
 
 
 def win_speed_bonus(turn_index: int, max_episode_turns: int, config: RewardShapingConfig | None = None) -> float:
@@ -140,7 +174,7 @@ def game_outcome_reward(*, candidate_score: float, opponent_score: float, turn_i
         return float(cfg.win_reward + win_speed_bonus(turn_index, max_episode_turns, cfg))
     if candidate_score < opponent_score:
         progress = min(max(turn_index, 1), max_episode_turns) / max(1, max_episode_turns)
-        return float(cfg.loss_penalty + 800.0 * progress)
+        return float(cfg.loss_penalty + (abs(cfg.loss_penalty) * 0.8 * progress))
     return 0.0
 
 
