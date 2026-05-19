@@ -32,6 +32,13 @@ def main() -> None:
     parser.add_argument("--candidate-player", type=int, default=0)
     parser.add_argument("--max-episode-turns", type=int, default=500)
     parser.add_argument("--tensorboard-log", default="runs/tensorboard")
+    parser.add_argument(
+        "--verbose",
+        type=int,
+        default=0,
+        choices=(0, 1, 2),
+        help="SB3 verbosity: 0=no output, 1=training stats table, 2=debug-level details.",
+    )
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--require-kaggle", dest="require_kaggle", action="store_true", default=True)
     group.add_argument("--no-require-kaggle", dest="require_kaggle", action="store_false")
@@ -63,6 +70,7 @@ def main() -> None:
         max_episode_turns=args.max_episode_turns,
         require_kaggle=args.require_kaggle,
         tensorboard_log=args.tensorboard_log if args.tensorboard_log else None,
+        verbose=args.verbose,
     )
     print(f"wrote {train_ppo(config)}")
 
