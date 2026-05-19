@@ -38,7 +38,7 @@ class PPOTrainConfig:
 
     # Logging.
     tensorboard_log: str | None = "runs/tensorboard"
-    verbose: int = 1
+    verbose: int = 0
 
     def validate(self) -> None:
         """Raise ``ValueError`` if this config requests unsupported PPO training."""
