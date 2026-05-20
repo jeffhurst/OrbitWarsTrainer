@@ -218,6 +218,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         candidate_player: int = 0,
         seed: int = 0,
         max_episode_turns: int = 400,
+        collect_diagnostics: bool = True,
         require_kaggle: bool = True,
     ):
         if opponent == "starter":
@@ -235,6 +236,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         self.candidate_player = candidate_player
         self.seed_value = seed
         self.max_episode_turns = max_episode_turns
+        self.collect_diagnostics = collect_diagnostics
         self.require_kaggle = require_kaggle
         self.candidate_config = CandidateConfig()
         self.action_config = ActionDecodeConfig()
@@ -316,23 +318,25 @@ class OrbitWarsPlanetStepEnv(gym.Env):
             sun_radius=sun_collision_radius_from_obs(self.obs),
         )
         decoded_rows = rows(decoded)
-        self.episode_action_count += 1
-        self.episode_ships_sent_total += float(sum(float(row[2]) for row in decoded_rows if len(row) >= 3))
+        if self.collect_diagnostics:
+            self.episode_action_count += 1
+            self.episode_ships_sent_total += float(sum(float(row[2]) for row in decoded_rows if len(row) >= 3))
         action_values = np.asarray(action, dtype=np.float32).reshape(-1).tolist()
-        for idx, value in enumerate(action_values[: min(len(chosen), 4)]):
-            if int(value) <= 0:
-                continue
-            target = chosen[idx]
-            if target.owner == (1 - self.candidate_player):
-                self.episode_enemy_target_count += 1
-            elif target.owner < 0:
-                self.episode_neutral_target_count += 1
-            elif target.owner == self.candidate_player:
-                self.episode_self_target_count += 1
+        if self.collect_diagnostics:
+            for idx, value in enumerate(action_values[: min(len(chosen), 4)]):
+                if int(value) <= 0:
+                    continue
+                target = chosen[idx]
+                if target.owner == (1 - self.candidate_player):
+                    self.episode_enemy_target_count += 1
+                elif target.owner < 0:
+                    self.episode_neutral_target_count += 1
+                elif target.owner == self.candidate_player:
+                    self.episode_self_target_count += 1
         requested_targets = sum(1 for value in action_values[: min(len(chosen), 4)] if int(value) > 0)
         executed_targets = len(decoded_rows)
         dropped_targets = max(0, requested_targets - executed_targets)
-        if dropped_targets > 0:
+        if self.collect_diagnostics and dropped_targets > 0:
             self.episode_invalid_action_count += dropped_targets
         waste_penalty = -self.reward_config.invalid_action_penalty * float(dropped_targets)
         self.episode_waste_penalty_total += waste_penalty
@@ -404,13 +408,14 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         capture_reward = planet_capture_reward(
             planets_before, planets_after, self.candidate_player, self.reward_config
         )
-        for after in planets_after:
-            before = before_by_id_planet.get(after.id)
-            if before is not None and before.owner != after.owner and after.owner == self.candidate_player:
-                if before.owner == opponent_player:
-                    self.episode_enemy_captures += 1
-                elif before.owner < 0:
-                    self.episode_neutral_captures += 1
+        if self.collect_diagnostics:
+            for after in planets_after:
+                before = before_by_id_planet.get(after.id)
+                if before is not None and before.owner != after.owner and after.owner == self.candidate_player:
+                    if before.owner == opponent_player:
+                        self.episode_enemy_captures += 1
+                    elif before.owner < 0:
+                        self.episode_neutral_captures += 1
         passive_penalty = idle_ship_penalty(self.obs, self.candidate_player, self.reward_config) * self.reward_config.reward_scale
         self.episode_waste_penalty_total += passive_penalty
         self.episode_capture_reward_total += capture_reward * self.reward_config.reward_scale
@@ -466,72 +471,86 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         win_rate = 1.0 if terminated and not truncated and terminal_reward > 0 else 0.0
         loss_rate = 1.0 if terminated and not truncated and terminal_reward < 0 else 0.0
         timeout_rate = 1.0 if truncated else 0.0
+        episode_components = None
+        if terminated or truncated:
+            episode_components = {
+                "reward/terminal": terminal_reward,
+                "reward/strategic_delta": strategic_delta,
+                "reward/capture": float(self.episode_capture_reward_total),
+                "reward/pressure": pressure_delta,
+                "reward/ship_delta": ship_delta_reward,
+                "reward/production_delta": production_delta_reward,
+                "reward/capture_delta": capture_delta_reward,
+                "reward/local_action": float(self.episode_reward_total - scaled_reward),
+                "reward/waste_penalty": float(self.episode_waste_penalty_total),
+                "reward/total": float(self.episode_reward_total),
+                "game/win_rate": win_rate,
+                "game/loss_rate": loss_rate,
+                "game/timeout_rate": timeout_rate,
+                "game/avg_turns": float(self.episode_turn_count),
+            }
+            if self.collect_diagnostics:
+                episode_components.update(
+                    {
+                        "game/avg_enemy_captures": float(self.episode_enemy_captures),
+                        "game/avg_neutral_captures": float(self.episode_neutral_captures),
+                        "action/invalid_rate": float(self.episode_invalid_action_count / max(1, self.episode_action_count * 4)),
+                        "action/ships_sent_mean": float(self.episode_ships_sent_total / max(1, self.episode_action_count)),
+                        "action/enemy_target_rate": float(self.episode_enemy_target_count / max(1, self.episode_action_count * 4)),
+                        "action/neutral_target_rate": float(self.episode_neutral_target_count / max(1, self.episode_action_count * 4)),
+                        "action/self_target_rate": float(self.episode_self_target_count / max(1, self.episode_action_count * 4)),
+                    }
+                )
+        info = {
+            "turn_advanced": True,
+            "capture_reward": capture_reward,
+            "send_reward": send_reward,
+            "terminal_reward": terminal_reward,
+            "turn_index": self.turn_index,
+            "source_id": self._current_source_id(),
+            "passive_penalty": passive_penalty,
+            "reward_unscaled_total": reward,
+            "reward_total": scaled_reward,
+            "episode_components": episode_components,
+        }
+        if self.collect_diagnostics:
+            info.update(
+                {
+                    "production_before": production_before,
+                    "production_after": current_total,
+                    "production_delta": production_delta,
+                    "buffered_actions": buffered,
+                    "production_advantage_before": prod_adv_before,
+                    "production_advantage": prod_adv_after,
+                    "production_advantage_delta": prod_adv_delta,
+                    "score_advantage_before": score_adv_before,
+                    "score_advantage": score_adv_after,
+                    "score_advantage_delta": score_adv_delta,
+                    "pressure_advantage_before": pressure_before,
+                    "pressure_advantage": pressure_after,
+                    "strategic_score_before": strategic_before,
+                    "strategic_score": strategic_after,
+                    "strategic_score_delta": strategic_delta,
+                    "pressure_delta": pressure_delta,
+                    "ship_advantage_before": ship_adv_before,
+                    "ship_advantage": ship_adv_after,
+                    "ship_delta_reward": ship_delta_reward,
+                    "production_delta_reward": production_delta_reward,
+                    "capture_delta_reward": capture_delta_reward,
+                    "enemy_planets_captured_us": enemy_captured,
+                    "our_planets_captured": we_captured,
+                    "dense_reward": dense_reward,
+                    "team_reward": team_reward,
+                    "per_action_team_reward": reward,
+                    "reward_scale": self.reward_config.reward_scale,
+                }
+            )
         return (
             self._current_obs(),
             scaled_reward,
             bool(terminated),
             bool(truncated),
-            {
-                "turn_advanced": True,
-                "production_before": production_before,
-                "production_after": current_total,
-                "production_delta": production_delta,
-                "capture_reward": capture_reward,
-                "send_reward": send_reward,
-                "terminal_reward": terminal_reward,
-                "buffered_actions": buffered,
-                "turn_index": self.turn_index,
-                "source_id": self._current_source_id(),
-                "production_advantage_before": prod_adv_before,
-                "production_advantage": prod_adv_after,
-                "production_advantage_delta": prod_adv_delta,
-                "score_advantage_before": score_adv_before,
-                "score_advantage": score_adv_after,
-                "score_advantage_delta": score_adv_delta,
-                "pressure_advantage_before": pressure_before,
-                "pressure_advantage": pressure_after,
-                "strategic_score_before": strategic_before,
-                "strategic_score": strategic_after,
-                "strategic_score_delta": strategic_delta,
-                "pressure_delta": pressure_delta,
-                "ship_advantage_before": ship_adv_before,
-                "ship_advantage": ship_adv_after,
-                "ship_delta_reward": ship_delta_reward,
-                "production_delta_reward": production_delta_reward,
-                "capture_delta_reward": capture_delta_reward,
-                "enemy_planets_captured_us": enemy_captured,
-                "our_planets_captured": we_captured,
-                "passive_penalty": passive_penalty,
-                "dense_reward": dense_reward,
-                "team_reward": team_reward,
-                "per_action_team_reward": reward,
-                "reward_scale": self.reward_config.reward_scale,
-                "reward_unscaled_total": reward,
-                "reward_total": scaled_reward,
-                "episode_components": {
-                    "reward/terminal": terminal_reward,
-                    "reward/strategic_delta": strategic_delta,
-                    "reward/capture": float(self.episode_capture_reward_total),
-                    "reward/pressure": pressure_delta,
-                    "reward/ship_delta": ship_delta_reward,
-                    "reward/production_delta": production_delta_reward,
-                    "reward/capture_delta": capture_delta_reward,
-                    "reward/local_action": float(self.episode_reward_total - scaled_reward),
-                    "reward/waste_penalty": float(self.episode_waste_penalty_total),
-                    "reward/total": float(self.episode_reward_total),
-                    "game/win_rate": win_rate,
-                    "game/loss_rate": loss_rate,
-                    "game/timeout_rate": timeout_rate,
-                    "game/avg_turns": float(self.episode_turn_count),
-                    "game/avg_enemy_captures": float(self.episode_enemy_captures),
-                    "game/avg_neutral_captures": float(self.episode_neutral_captures),
-                    "action/invalid_rate": float(self.episode_invalid_action_count / max(1, self.episode_action_count * 4)),
-                    "action/ships_sent_mean": float(self.episode_ships_sent_total / max(1, self.episode_action_count)),
-                    "action/enemy_target_rate": float(self.episode_enemy_target_count / max(1, self.episode_action_count * 4)),
-                    "action/neutral_target_rate": float(self.episode_neutral_target_count / max(1, self.episode_action_count * 4)),
-                    "action/self_target_rate": float(self.episode_self_target_count / max(1, self.episode_action_count * 4)),
-                } if (terminated or truncated) else None,
-            },
+            info,
         )
 
     def _build_opponent_agent(self) -> Any:

@@ -31,6 +31,7 @@ def train_ppo(config: PPOTrainConfig) -> Path:
         candidate_player=config.candidate_player,
         seed=config.seed,
         max_episode_turns=config.max_episode_turns,
+        collect_diagnostics=config.collect_diagnostics,
         require_kaggle=config.require_kaggle,
     )
     tensorboard_log = config.tensorboard_log
@@ -65,7 +66,8 @@ def train_ppo(config: PPOTrainConfig) -> Path:
         device="cpu",
         target_kl=0.03,
     )
-    model.learn(total_timesteps=config.timesteps, progress_bar=False, callback=EpisodeComponentLogger())
+    callback = EpisodeComponentLogger() if config.collect_diagnostics else None
+    model.learn(total_timesteps=config.timesteps, progress_bar=False, callback=callback)
     out = Path(config.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     model.save(str(out))

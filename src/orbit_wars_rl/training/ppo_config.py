@@ -34,6 +34,7 @@ class PPOTrainConfig:
     opponent_model: str | Path | None = None
     candidate_player: int = 0
     max_episode_turns: int = 500
+    collect_diagnostics: bool = True
     require_kaggle: bool = True
 
     # Logging.
