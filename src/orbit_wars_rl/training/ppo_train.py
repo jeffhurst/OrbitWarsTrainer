@@ -4,7 +4,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from orbit_wars_rl.training.ppo_config import PPOTrainConfig
-from orbit_wars_rl.training.callbacks import EpisodeComponentLogger
 
 
 def parse_net_arch(value: str) -> tuple[int, ...]:

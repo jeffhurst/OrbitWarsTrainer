@@ -35,7 +35,6 @@ src/orbit_wars_rl/models/policy.py
 src/orbit_wars_rl/models/save_load.py
 src/orbit_wars_rl/models/sb3_policy.py
 src/orbit_wars_rl/training/__init__.py
-src/orbit_wars_rl/training/callbacks.py
 src/orbit_wars_rl/training/ppo_config.py
 src/orbit_wars_rl/training/ppo_train.py
 src/orbit_wars_rl/training/reward.py
