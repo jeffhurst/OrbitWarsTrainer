@@ -243,6 +243,9 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         self.env: Any | None = None
         self.opponent_agent: Any | None = None
         self.obs: dict[str, Any] = {}
+        self._cached_planets: list[Planet] = []
+        self._cached_comet_ids: set[int] = set()
+        self._cached_sources: list[Planet] = []
         self.sources: list[Planet] = []
         self.current_source_index = 0
         self.buffered_actions: list = []
@@ -271,6 +274,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
             reset()
         self.opponent_agent = self._build_opponent_agent()
         self.obs = _extract_player_observation(self.env, self.candidate_player)
+        self._refresh_obs_cache()
         self.turn_index = 0
         self.buffered_actions = []
         self.episode_action_count = 0
@@ -286,7 +290,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         self.episode_capture_reward_total = 0.0
         self.episode_waste_penalty_total = 0.0
         self._rebuild_sources()
-        self.previous_total_production = total_production(parse_planets(self.obs), self.candidate_player)
+        self.previous_total_production = total_production(self._cached_planets, self.candidate_player)
         return self._current_obs(), {"source_id": self._current_source_id(), "no_source": not self.sources}
 
     def step(self, action):
@@ -295,14 +299,12 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         if not self.sources:
             return self._advance_turn([])
         source = self.sources[self.current_source_index]
-        planets = parse_planets(self.obs)
-        comet_ids = comet_ids_from_obs(self.obs)
         _model_obs, chosen = self.builder.build_for_source(
             source,
-            planets,
+            self._cached_planets,
             self.candidate_player,
             previous_total_production=self.previous_total_production,
-            comet_ids=comet_ids,
+            comet_ids=self._cached_comet_ids,
         )
         decoded = decode_model_outputs(
             source,
@@ -384,7 +386,8 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         _step_kaggle_env(self.env, actions0, actions1)
         self.turn_index += 1
         self.obs = _extract_player_observation(self.env, self.candidate_player)
-        planets_after = parse_planets(self.obs)
+        self._refresh_obs_cache()
+        planets_after = self._cached_planets
         current_total = total_production(planets_after, self.candidate_player)
         production_delta = float(current_total - production_before)
         prod_adv_after = production_advantage(self.obs, self.candidate_player)
@@ -538,10 +541,16 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         return ModelAgent(policy=loaded_policy)
 
     def _rebuild_sources(self) -> None:
-        planets = parse_planets(self.obs)
-        comet_ids = comet_ids_from_obs(self.obs)
-        self.sources = [p for p in planets if p.owner == self.candidate_player and p.id not in comet_ids]
+        self._cached_sources = [
+            p for p in self._cached_planets if p.owner == self.candidate_player and p.id not in self._cached_comet_ids
+        ]
+        self.sources = list(self._cached_sources)
         self.current_source_index = 0
+
+    def _refresh_obs_cache(self) -> None:
+        self._cached_planets = parse_planets(self.obs)
+        self._cached_comet_ids = set(comet_ids_from_obs(self.obs))
+        self._cached_sources = []
 
     def _current_source_id(self) -> int | None:
         if not self.sources:
@@ -554,9 +563,9 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         source = self.sources[min(self.current_source_index, len(self.sources) - 1)]
         vec, _chosen = self.builder.build_for_source(
             source,
-            parse_planets(self.obs),
+            self._cached_planets,
             self.candidate_player,
             previous_total_production=self.previous_total_production,
-            comet_ids=comet_ids_from_obs(self.obs),
+            comet_ids=self._cached_comet_ids,
         )
         return np.asarray(list(vec), dtype=np.float32)
