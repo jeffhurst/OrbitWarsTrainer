@@ -30,37 +30,4 @@ class EpisodeComponentLogger(BaseCallback):
                 continue
             for key, value in episode.items():
                 self.logger.record(key, float(value))
-            ordered_keys = [
-                "reward/terminal",
-                "reward/strategic_delta",
-                "reward/capture",
-                "reward/pressure",
-                "reward/local_action",
-                "reward/waste_penalty",
-                "reward/total",
-                "game/win_rate",
-                "game/loss_rate",
-                "game/timeout_rate",
-                "game/avg_turns",
-                "game/avg_enemy_captures",
-                "game/avg_neutral_captures",
-                "action/invalid_rate",
-                "action/ships_sent_mean",
-                "action/enemy_target_rate",
-                "action/neutral_target_rate",
-                "action/self_target_rate",
-            ]
-            print("[episode]")
-            matched = False
-            for key in ordered_keys:
-                if key in episode:
-                    print(f"  {key}: {float(episode[key]):.4f}")
-                    matched = True
-            if not matched:
-                for key in sorted(episode):
-                    value = episode[key]
-                    if isinstance(value, (int, float)):
-                        print(f"  {key}: {float(value):.4f}")
-                    else:
-                        print(f"  {key}: {value}")
         return True
