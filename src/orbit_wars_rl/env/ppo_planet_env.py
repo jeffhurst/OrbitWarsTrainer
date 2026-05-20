@@ -410,8 +410,18 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         passive_penalty = idle_ship_penalty(self.obs, self.candidate_player, self.reward_config) * self.reward_config.reward_scale
         self.episode_waste_penalty_total += passive_penalty
         self.episode_capture_reward_total += capture_reward * self.reward_config.reward_scale
-        enemy_captured = sum(1 for before in planets_before for after in planets_after if before.id == after.id and before.owner == self.candidate_player and after.owner == opponent_player)
-        we_captured = sum(1 for before in planets_before for after in planets_after if before.id == after.id and before.owner != self.candidate_player and after.owner == self.candidate_player)
+        before_by_id = {p.id: p.owner for p in planets_before}
+        after_by_id = {p.id: p.owner for p in planets_after}
+        enemy_captured = 0
+        we_captured = 0
+        for planet_id, before_owner in before_by_id.items():
+            after_owner = after_by_id.get(planet_id)
+            if after_owner is None or before_owner == after_owner:
+                continue
+            if before_owner == self.candidate_player and after_owner == opponent_player:
+                enemy_captured += 1
+            if before_owner != self.candidate_player and after_owner == self.candidate_player:
+                we_captured += 1
         net_capture_delta = we_captured - enemy_captured
         ship_delta_reward = self.reward_config.ship_delta_weight * ((ship_score_after - enemy_ship_score_after) / max(1.0, ship_score_after + enemy_ship_score_after))
         production_delta_reward = self.reward_config.production_delta_weight * prod_adv_after
