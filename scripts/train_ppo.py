@@ -31,6 +31,9 @@ def main() -> None:
     parser.add_argument("--opponent-model", default=None)
     parser.add_argument("--candidate-player", type=int, default=0)
     parser.add_argument("--max-episode-turns", type=int, default=500)
+    diag_group = parser.add_mutually_exclusive_group()
+    diag_group.add_argument("--collect-diagnostics", dest="collect_diagnostics", action="store_true", default=True)
+    diag_group.add_argument("--no-collect-diagnostics", dest="collect_diagnostics", action="store_false")
     parser.add_argument("--tensorboard-log", default="runs/tensorboard")
     parser.add_argument(
         "--verbose",
@@ -68,6 +71,7 @@ def main() -> None:
         opponent_model=args.opponent_model,
         candidate_player=args.candidate_player,
         max_episode_turns=args.max_episode_turns,
+        collect_diagnostics=args.collect_diagnostics,
         require_kaggle=args.require_kaggle,
         tensorboard_log=args.tensorboard_log if args.tensorboard_log else None,
         verbose=args.verbose,
