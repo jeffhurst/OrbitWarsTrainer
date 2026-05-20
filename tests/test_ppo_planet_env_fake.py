@@ -122,3 +122,31 @@ def test_fake_planet_step_env_adds_ship_score_terminal_bonus_on_truncation(monke
     assert truncated is True
     assert -100.0 <= info["terminal_reward"] <= 100.0
     assert reward == pytest.approx(info["reward_total"])
+
+def test_reset_uses_new_random_map_seed_for_each_game(monkeypatch):
+    from orbit_wars_rl.env import ppo_planet_env
+
+    class DummyKaggleEnv:
+        def reset(self):
+            return None
+
+    calls = []
+
+    def fake_require_kaggle_env(**kwargs):
+        calls.append(kwargs)
+        return DummyKaggleEnv()
+
+    def fake_extract_player_observation(_env, player):
+        return _FakeOrbitWarsBackend(0).observation(player)
+
+    monkeypatch.setattr(ppo_planet_env, "require_kaggle_env", fake_require_kaggle_env)
+    monkeypatch.setattr(ppo_planet_env, "_extract_player_observation", fake_extract_player_observation)
+
+    env = OrbitWarsPlanetStepEnv(require_kaggle=True, seed=7)
+    env.reset()
+    env.reset()
+
+    assert len(calls) == 2
+    assert calls[0]["debug"] is True
+    assert calls[1]["debug"] is True
+    assert calls[0]["configuration"]["randomSeed"] != calls[1]["configuration"]["randomSeed"]
