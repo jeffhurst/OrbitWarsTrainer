@@ -380,6 +380,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         enemy_ship_score_before = player_score(self.obs, opponent_player)
         ship_adv_before = ship_score_before - enemy_ship_score_before
         planets_before = parse_planets(self.obs)
+        before_by_id_planet = {p.id: p for p in planets_before}
         _step_kaggle_env(self.env, actions0, actions1)
         self.turn_index += 1
         self.obs = _extract_player_observation(self.env, self.candidate_player)
@@ -401,7 +402,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
             planets_before, planets_after, self.candidate_player, self.reward_config
         )
         for after in planets_after:
-            before = next((p for p in planets_before if p.id == after.id), None)
+            before = before_by_id_planet.get(after.id)
             if before is not None and before.owner != after.owner and after.owner == self.candidate_player:
                 if before.owner == opponent_player:
                     self.episode_enemy_captures += 1
