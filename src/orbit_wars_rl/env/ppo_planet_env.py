@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import random
 from typing import Any
 
 try:
@@ -234,6 +235,8 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         self.opponent_model = opponent_model
         self.candidate_player = candidate_player
         self.seed_value = seed
+        self._map_seed_rng = random.Random(seed)
+        self._episode_index = 0
         self.max_episode_turns = max_episode_turns
         self.require_kaggle = require_kaggle
         self.candidate_config = CandidateConfig()
@@ -263,7 +266,15 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         del options
         if seed is not None:
             self.seed_value = seed
-        self.env = require_kaggle_env(debug=True) if self.require_kaggle else _FakeOrbitWarsBackend(self.seed_value)
+            self._map_seed_rng = random.Random(seed)
+            self._episode_index = 0
+        map_seed = self._map_seed_rng.randint(0, 2**31 - 1)
+        self._episode_index += 1
+        self.env = (
+            require_kaggle_env(debug=True, configuration={"randomSeed": map_seed})
+            if self.require_kaggle
+            else _FakeOrbitWarsBackend(map_seed)
+        )
         reset = getattr(self.env, "reset", None)
         if callable(reset):
             reset()
