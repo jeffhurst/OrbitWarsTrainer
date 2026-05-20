@@ -4,7 +4,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from orbit_wars_rl.training.ppo_config import PPOTrainConfig
-from orbit_wars_rl.training.callbacks import EpisodeComponentLogger
 
 
 def parse_net_arch(value: str) -> tuple[int, ...]:
@@ -66,7 +65,7 @@ def train_ppo(config: PPOTrainConfig) -> Path:
         device="cpu",
         target_kl=0.03,
     )
-    model.learn(total_timesteps=config.timesteps, progress_bar=False, callback=EpisodeComponentLogger())
+    model.learn(total_timesteps=config.timesteps, progress_bar=False)
     out = Path(config.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     model.save(str(out))
