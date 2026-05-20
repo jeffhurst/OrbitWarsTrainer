@@ -31,6 +31,7 @@ def train_ppo(config: PPOTrainConfig) -> Path:
         candidate_player=config.candidate_player,
         seed=config.seed,
         max_episode_turns=config.max_episode_turns,
+        collect_diagnostics=config.collect_diagnostics,
         require_kaggle=config.require_kaggle,
     )
     tensorboard_log = config.tensorboard_log
