@@ -12,6 +12,11 @@ def test_ppo_config_defaults_validate():
     assert cfg.opponent_model is None
 
 
+def test_ppo_config_supported_non_model_opponents_validate_without_model_path():
+    for opponent in ("starter", "random", "greedy", "hard"):
+        PPOTrainConfig(opponent=opponent).validate()
+
+
 def test_ppo_config_model_opponent_requires_model_path():
     cfg = PPOTrainConfig(opponent="model", opponent_model="runs/models/some_model.zip")
     cfg.validate()
@@ -23,8 +28,11 @@ def test_ppo_config_model_opponent_requires_model_path():
         {"timesteps": 0},
         {"n_envs": 2},
         {"candidate_player": 2},
-        {"opponent": "random"},
         {"opponent": "starter", "opponent_model": "runs/models/some_model.zip"},
+        {"opponent": "random", "opponent_model": "runs/models/some_model.zip"},
+        {"opponent": "greedy", "opponent_model": "runs/models/some_model.zip"},
+        {"opponent": "hard", "opponent_model": "runs/models/some_model.zip"},
+        {"opponent": "unknown"},
         {"opponent": "model"},
         {"net_arch": ()},
         {"net_arch": (64, 0)},
