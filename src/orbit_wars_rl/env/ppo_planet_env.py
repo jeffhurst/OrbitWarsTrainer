@@ -266,10 +266,11 @@ class OrbitWarsPlanetStepEnv(gym.Env):
     def reset(self, *, seed: int | None = None, options: dict | None = None):
         options = options or {}
         reset_seed = seed if seed is not None else options.get("seed")
-        if reset_seed is not None:
+        if reset_seed is not None and self._episode_index == 0:
+            # Some training stacks pass the same reset seed repeatedly.
+            # Only apply it on the first reset so later episodes still vary.
             self.seed_value = int(reset_seed)
             self._map_seed_rng = random.Random(int(reset_seed))
-            self._episode_index = 0
 
         map_seed_opt = options.get("map_seed")
         if map_seed_opt is not None:
