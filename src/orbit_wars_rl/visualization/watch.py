@@ -59,6 +59,7 @@ def watch_agents(
     agent1: AgentCallable,
     out_dir: str | Path = "runs/watch",
     name: str = "starter_vs_starter",
+    seed: int | None = None,
 ) -> list[Path]:
     """Run a real Kaggle Orbit Wars episode and save an HTML replay plus episode JSON.
 
@@ -66,7 +67,10 @@ def watch_agents(
     environment workflow from the public getting-started notebook: create the ``orbit_wars``
     environment, run two agents against each other, and render the completed episode.
     """
-    env = require_kaggle_env(debug=True)
+    make_kwargs: dict[str, Any] = {"debug": True}
+    if seed is not None:
+        make_kwargs["configuration"] = {"seed": int(seed)}
+    env = require_kaggle_env(**make_kwargs)
     env.run([kaggle_agent(agent0), kaggle_agent(agent1)])
 
     out = Path(out_dir)

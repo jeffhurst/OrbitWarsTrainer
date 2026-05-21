@@ -38,6 +38,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--out-dir", default="runs/watch", help="Directory for replay artifacts.")
     parser.add_argument("--name", default=None, help="Replay artifact basename.")
+    parser.add_argument("--seed", type=int, default=None, help="Kaggle map seed to force a specific map layout.")
     args = parser.parse_args()
 
     model_agent = ModelAgent(policy=load_policy(args.model))
@@ -45,6 +46,6 @@ if __name__ == "__main__":
     opponent_agent = make_opponent(opponent_name)
     replay_name = args.name or f"model_vs_{opponent_name}"
 
-    paths = watch_agents(model_agent.act, opponent_agent.act, out_dir=args.out_dir, name=replay_name)
+    paths = watch_agents(model_agent.act, opponent_agent.act, out_dir=args.out_dir, name=replay_name, seed=args.seed)
     for path in paths:
         print(f"wrote {path}")
