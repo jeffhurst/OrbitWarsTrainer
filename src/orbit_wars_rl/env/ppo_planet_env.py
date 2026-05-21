@@ -237,6 +237,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         self.seed_value = seed
         self._map_seed_rng = random.Random(seed)
         self._episode_index = 0
+        self._last_map_seed: int | None = None
         self.max_episode_turns = max_episode_turns
         self.require_kaggle = require_kaggle
         self.candidate_config = CandidateConfig()
@@ -263,15 +264,28 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         self.episode_neutral_captures = 0
 
     def reset(self, *, seed: int | None = None, options: dict | None = None):
-        del options
-        if seed is not None:
-            self.seed_value = seed
-            self._map_seed_rng = random.Random(seed)
+        options = options or {}
+        reset_seed = seed if seed is not None else options.get("seed")
+        if reset_seed is not None:
+            self.seed_value = int(reset_seed)
+            self._map_seed_rng = random.Random(int(reset_seed))
             self._episode_index = 0
-        map_seed = self._map_seed_rng.randint(0, 2**31 - 1)
+
+        map_seed_opt = options.get("map_seed")
+        if map_seed_opt is not None:
+            map_seed = int(map_seed_opt)
+        else:
+            # Avoid accidental repeats even when a caller repeatedly passes reset(seed=...).
+            # Mix episode index into RNG stream so each reset gets a distinct map seed.
+            stream_seed = self._map_seed_rng.randint(0, 2**31 - 1)
+            map_seed = (stream_seed ^ ((self._episode_index + 1) * 1_000_003)) & 0x7FFF_FFFF
+            if self._last_map_seed is not None and map_seed == self._last_map_seed:
+                map_seed = (map_seed + 1) & 0x7FFF_FFFF
+
         self._episode_index += 1
+        self._last_map_seed = map_seed
         self.env = (
-            require_kaggle_env(debug=True, configuration={"randomSeed": map_seed})
+            require_kaggle_env(debug=True, configuration={"randomSeed": int(map_seed)})
             if self.require_kaggle
             else _FakeOrbitWarsBackend(map_seed)
         )
@@ -294,7 +308,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         self.episode_neutral_captures = 0
         self._rebuild_sources()
         self.previous_total_production = total_production(parse_planets(self.obs), self.candidate_player)
-        return self._current_obs(), {"source_id": self._current_source_id(), "no_source": not self.sources}
+        return self._current_obs(), {"source_id": self._current_source_id(), "no_source": not self.sources, "map_seed": map_seed}
 
     def step(self, action):
         if self.env is None:

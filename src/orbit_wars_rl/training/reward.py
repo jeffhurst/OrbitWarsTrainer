@@ -28,13 +28,13 @@ class RewardShapingConfig:
     planet_adv_weight: float = 55.0
     ship_adv_weight: float = 45.0
     pressure_adv_weight: float = 15.0
-    ship_delta_weight: float = 120.0
-    production_delta_weight: float = 85.0
-    net_capture_weight: float = 28.0
+    ship_delta_weight: float = 100.0
+    production_delta_weight: float = 130.0
+    net_capture_weight: float = 60.0
 
-    enemy_capture_reward: float = 30.0
-    neutral_capture_reward: float = 15.0
-    captured_production_weight: float = 5.0
+    enemy_capture_reward: float = 55.0
+    neutral_capture_reward: float = 30.0
+    captured_production_weight: float = 12.0
 
     local_action_weight: float = 1.0
     send_overmatch_bonus: float = 2.0
