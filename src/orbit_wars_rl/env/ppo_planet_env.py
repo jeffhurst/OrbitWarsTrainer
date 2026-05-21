@@ -271,7 +271,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
 
         self._episode_index += 1
         self.env = (
-            require_kaggle_env(debug=True, configuration={"randomSeed": int(map_seed)})
+            require_kaggle_env(debug=True, configuration={"seed": int(map_seed)})
             if self.require_kaggle
             else _FakeOrbitWarsBackend(map_seed)
         )
