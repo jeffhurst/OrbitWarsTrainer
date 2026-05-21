@@ -2,39 +2,16 @@
 from __future__ import annotations
 
 from pathlib import Path
+import random
 from typing import Any
 
 try:
     import numpy as np
-except Exception:  # pragma: no cover - minimal non-RL installations.
-    class _MiniArray(list):
-        @property
-        def shape(self):
-            return (len(self),)
-
-        def reshape(self, *shape):
-            return self
-
-        def tolist(self):
-            return list(self)
-
-    class _MiniNumpy:
-        inf = float("inf")
-        float32 = float
-
-        @staticmethod
-        def asarray(value, dtype=None):
-            return _MiniArray(float(v) for v in value)
-
-        @staticmethod
-        def zeros(shape, dtype=None):
-            return _MiniArray(0.0 for _ in range(shape[0]))
-
-        @staticmethod
-        def full(shape, value, dtype=None):
-            return _MiniArray(float(value) for _ in range(shape[0]))
-
-    np = _MiniNumpy()  # type: ignore[assignment]
+except Exception as exc:  # pragma: no cover - exercised only when numpy is missing/broken.
+    raise RuntimeError(
+        "OrbitWarsPlanetStepEnv requires NumPy. Install dependencies with "
+        "`pip install -e .` (or at least `pip install numpy`)."
+    ) from exc
 
 try:  # Keep non-RL imports usable when gymnasium is not installed.
     import gymnasium as gym
@@ -80,6 +57,18 @@ from orbit_wars_rl.core.planets import total_production
 from orbit_wars_rl.core.types import Planet, parse_planets, rows
 from orbit_wars_rl.env.kaggle_env import require_kaggle_env
 from orbit_wars_rl.models.save_load import load_any_policy
+
+MAP_SEEDS = [
+    5199, 2083, 3493, 1649, 3233, 405, 3335, 1030, 1467, 78, 32, 1900, 647, 417, 1, 2560,
+    272, 585, 1265, 741, 489, 2537, 422, 787, 455, 324, 119, 828, 1049, 906, 1117, 1990,
+    5274, 2661, 3774, 2794, 3578, 7045, 4333, 1153, 2412, 1750, 2078, 2957, 1843, 451, 1725, 4676,
+    662, 1217, 4461, 4785, 5675, 3403, 4814, 1336, 2996, 2509, 3959, 2867, 2572, 2476, 1282, 2393,
+    7542, 6328, 5923, 4252, 4027, 9408, 4693, 2726, 3154, 7166, 6858, 4393, 2177, 2663, 1948, 6475,
+    4353, 6462, 5981, 8516, 7770, 6593, 4963, 3473, 3520, 7337, 8763, 9017, 6202, 5047, 1571, 6294,
+    8909, 9327, 8514, 9240, 6548, 9658, 9812, 8686, 8717, 8866, 7079, 9306, 7314, 8782, 2419, 8526,
+    9118, 9984, 8855, 9227, 8624, 8968, 7186, 9013, 4633, 8603, 9102, 9547, 9453, 7947, 3462, 9427,
+]
+
 from orbit_wars_rl.training.reward import (
     RewardShapingConfig,
     game_outcome_reward,
@@ -234,6 +223,9 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         self.opponent_model = opponent_model
         self.candidate_player = candidate_player
         self.seed_value = seed
+        self._map_seed_rng = random.Random(seed)
+        self._episode_index = 0
+        self._seed_cycle: list[int] = []
         self.max_episode_turns = max_episode_turns
         self.require_kaggle = require_kaggle
         self.candidate_config = CandidateConfig()
@@ -260,10 +252,29 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         self.episode_neutral_captures = 0
 
     def reset(self, *, seed: int | None = None, options: dict | None = None):
-        del options
-        if seed is not None:
-            self.seed_value = seed
-        self.env = require_kaggle_env(debug=True) if self.require_kaggle else _FakeOrbitWarsBackend(self.seed_value)
+        options = options or {}
+        reset_seed = seed if seed is not None else options.get("seed")
+        if reset_seed is not None and self._episode_index == 0:
+            # Some training stacks pass the same reset seed repeatedly.
+            # Only apply it on the first reset so later episodes still vary.
+            self.seed_value = int(reset_seed)
+            self._map_seed_rng = random.Random(int(reset_seed))
+
+        map_seed_opt = options.get("map_seed")
+        if map_seed_opt is not None:
+            map_seed = int(map_seed_opt)
+        else:
+            if not self._seed_cycle:
+                self._seed_cycle = MAP_SEEDS.copy()
+                self._map_seed_rng.shuffle(self._seed_cycle)
+            map_seed = self._seed_cycle.pop()
+
+        self._episode_index += 1
+        self.env = (
+            require_kaggle_env(debug=True, configuration={"seed": int(map_seed)})
+            if self.require_kaggle
+            else _FakeOrbitWarsBackend(map_seed)
+        )
         reset = getattr(self.env, "reset", None)
         if callable(reset):
             reset()
@@ -283,7 +294,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         self.episode_neutral_captures = 0
         self._rebuild_sources()
         self.previous_total_production = total_production(parse_planets(self.obs), self.candidate_player)
-        return self._current_obs(), {"source_id": self._current_source_id(), "no_source": not self.sources}
+        return self._current_obs(), {"source_id": self._current_source_id(), "no_source": not self.sources, "map_seed": map_seed}
 
     def step(self, action):
         if self.env is None:
