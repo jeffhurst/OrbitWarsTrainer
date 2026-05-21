@@ -48,14 +48,14 @@ class PPOTrainConfig:
             raise ValueError("only n_envs == 1 is supported for now")
         if self.candidate_player not in (0, 1):
             raise ValueError("candidate_player must be 0 or 1")
-        if self.opponent == "starter":
+        if self.opponent in {"starter", "random", "greedy", "hard"}:
             if self.opponent_model is not None:
-                raise ValueError("opponent_model must be None when opponent='starter'")
+                raise ValueError("opponent_model must be None unless opponent='model'")
         elif self.opponent == "model":
             if self.opponent_model is None:
                 raise ValueError("opponent_model is required when opponent='model'")
         else:
-            raise ValueError("opponent must be one of: 'starter', 'model'")
+            raise ValueError("opponent must be one of: 'starter', 'random', 'greedy', 'hard', 'model'")
         if not self.net_arch:
             raise ValueError("net_arch must be nonempty")
         if any((not isinstance(width, int)) or width <= 0 for width in self.net_arch):

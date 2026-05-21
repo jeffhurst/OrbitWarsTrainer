@@ -28,7 +28,7 @@ def main() -> None:
     parser.add_argument("--vf-coef", type=float, default=defaults.vf_coef)
     parser.add_argument("--max-grad-norm", type=float, default=defaults.max_grad_norm)
     parser.add_argument("--net-arch", default=",".join(str(width) for width in defaults.net_arch))
-    parser.add_argument("--opponent", choices=("starter", "model"), default=defaults.opponent)
+    parser.add_argument("--opponent", choices=("starter", "random", "greedy", "hard", "model"), default=defaults.opponent)
     parser.add_argument("--opponent-model", default=defaults.opponent_model)
     parser.add_argument("--candidate-player", type=int, default=defaults.candidate_player)
     parser.add_argument("--max-episode-turns", type=int, default=defaults.max_episode_turns)

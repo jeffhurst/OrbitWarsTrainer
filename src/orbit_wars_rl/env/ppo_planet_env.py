@@ -47,7 +47,9 @@ except Exception:  # pragma: no cover - exercised only in minimal installations.
     gym = _Gym()  # type: ignore[assignment]
     spaces = _Spaces()  # type: ignore[assignment]
 
+from orbit_wars_rl.agents.heuristic_agent import GreedyAgent, HardAgent
 from orbit_wars_rl.agents.model_agent import ModelAgent
+from orbit_wars_rl.agents.random_agent import RandomAgent
 from orbit_wars_rl.agents.starter_agent import StarterAgent
 from orbit_wars_rl.core.actions import ActionDecodeConfig, decode_model_outputs
 from orbit_wars_rl.core.candidates import CandidateConfig, comet_ids_from_obs
@@ -206,14 +208,14 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         max_episode_turns: int = 400,
         require_kaggle: bool = True,
     ):
-        if opponent == "starter":
+        if opponent in {"starter", "random", "greedy", "hard"}:
             if opponent_model is not None:
-                raise ValueError("opponent_model must be None when opponent='starter'")
+                raise ValueError("opponent_model must be None unless opponent='model'")
         elif opponent == "model":
             if opponent_model is None:
                 raise ValueError("opponent_model is required when opponent='model'")
         else:
-            raise ValueError("opponent must be one of: 'starter', 'model'")
+            raise ValueError("opponent must be one of: 'starter', 'random', 'greedy', 'hard', 'model'")
         if candidate_player not in (0, 1):
             raise ValueError("candidate_player must be 0 or 1")
         self.opponent = opponent
@@ -508,6 +510,12 @@ class OrbitWarsPlanetStepEnv(gym.Env):
     def _build_opponent_agent(self) -> Any:
         if self.opponent == "starter":
             return StarterAgent()
+        if self.opponent == "random":
+            return RandomAgent(seed=self.seed_value + self._episode_index)
+        if self.opponent == "greedy":
+            return GreedyAgent()
+        if self.opponent == "hard":
+            return HardAgent()
         loaded_policy = load_any_policy(self.opponent_model)
         return ModelAgent(policy=loaded_policy)
 
