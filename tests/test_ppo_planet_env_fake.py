@@ -96,7 +96,7 @@ def test_fake_planet_step_env_adds_early_win_terminal_bonus(monkeypatch):
 
     assert terminated is True
     assert truncated is False
-    assert info["terminal_reward"] == pytest.approx(240.0 + 80.0 * (3 / 4))
+    assert info["terminal_reward"] == pytest.approx(240.0 + 140.0 * (3 / 4))
     assert reward == pytest.approx(info["reward_total"])
 
 
@@ -152,3 +152,16 @@ def test_reset_uses_new_random_map_seed_for_each_game(monkeypatch):
     assert calls[0]["configuration"]["randomSeed"] != calls[1]["configuration"]["randomSeed"]
     assert calls[0]["configuration"]["randomSeed"] in ppo_planet_env.MAP_SEEDS
     assert calls[1]["configuration"]["randomSeed"] in ppo_planet_env.MAP_SEEDS
+
+
+def test_episode_components_have_no_pressure_or_waste_and_reward_totals_match():
+    env = OrbitWarsPlanetStepEnv(require_kaggle=False, max_episode_turns=1)
+    _obs, reset_info = env.reset(seed=123)
+    _next_obs, reward, terminated, truncated, info = env._advance_turn([])
+    assert terminated or truncated
+    components = info["episode_components"]
+    assert "reward/pressure" not in components
+    assert "reward/waste_penalty" not in components
+    assert "game/map_seed" in components
+    assert components["reward/total"] == pytest.approx(reward)
+    assert reset_info["map_seed"] == int(components["game/map_seed"])
