@@ -34,9 +34,7 @@ class EpisodeComponentLogger(BaseCallback):
                 "reward/terminal",
                 "reward/strategic_delta",
                 "reward/capture",
-                "reward/pressure",
                 "reward/local_action",
-                "reward/waste_penalty",
                 "reward/total",
                 "game/win_rate",
                 "game/loss_rate",
@@ -44,11 +42,9 @@ class EpisodeComponentLogger(BaseCallback):
                 "game/avg_turns",
                 "game/avg_enemy_captures",
                 "game/avg_neutral_captures",
+                "game/map_seed",
                 "action/invalid_rate",
                 "action/ships_sent_mean",
-                "action/enemy_target_rate",
-                "action/neutral_target_rate",
-                "action/self_target_rate",
             ]
             print("[episode]")
             matched = False
