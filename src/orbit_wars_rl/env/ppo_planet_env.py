@@ -57,6 +57,18 @@ from orbit_wars_rl.core.planets import total_production
 from orbit_wars_rl.core.types import Planet, parse_planets, rows
 from orbit_wars_rl.env.kaggle_env import require_kaggle_env
 from orbit_wars_rl.models.save_load import load_any_policy
+
+MAP_SEEDS = [
+    5199, 2083, 3493, 1649, 3233, 405, 3335, 1030, 1467, 78, 32, 1900, 647, 417, 1, 2560,
+    272, 585, 1265, 741, 489, 2537, 422, 787, 455, 324, 119, 828, 1049, 906, 1117, 1990,
+    5274, 2661, 3774, 2794, 3578, 7045, 4333, 1153, 2412, 1750, 2078, 2957, 1843, 451, 1725, 4676,
+    662, 1217, 4461, 4785, 5675, 3403, 4814, 1336, 2996, 2509, 3959, 2867, 2572, 2476, 1282, 2393,
+    7542, 6328, 5923, 4252, 4027, 9408, 4693, 2726, 3154, 7166, 6858, 4393, 2177, 2663, 1948, 6475,
+    4353, 6462, 5981, 8516, 7770, 6593, 4963, 3473, 3520, 7337, 8763, 9017, 6202, 5047, 1571, 6294,
+    8909, 9327, 8514, 9240, 6548, 9658, 9812, 8686, 8717, 8866, 7079, 9306, 7314, 8782, 2419, 8526,
+    9118, 9984, 8855, 9227, 8624, 8968, 7186, 9013, 4633, 8603, 9102, 9547, 9453, 7947, 3462, 9427,
+]
+
 from orbit_wars_rl.training.reward import (
     RewardShapingConfig,
     game_outcome_reward,
@@ -213,7 +225,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         self.seed_value = seed
         self._map_seed_rng = random.Random(seed)
         self._episode_index = 0
-        self._last_map_seed: int | None = None
+        self._seed_cycle: list[int] = []
         self.max_episode_turns = max_episode_turns
         self.require_kaggle = require_kaggle
         self.candidate_config = CandidateConfig()
@@ -252,15 +264,12 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         if map_seed_opt is not None:
             map_seed = int(map_seed_opt)
         else:
-            # Avoid accidental repeats even when a caller repeatedly passes reset(seed=...).
-            # Mix episode index into RNG stream so each reset gets a distinct map seed.
-            stream_seed = self._map_seed_rng.randint(0, 2**31 - 1)
-            map_seed = (stream_seed ^ ((self._episode_index + 1) * 1_000_003)) & 0x7FFF_FFFF
-            if self._last_map_seed is not None and map_seed == self._last_map_seed:
-                map_seed = (map_seed + 1) & 0x7FFF_FFFF
+            if not self._seed_cycle:
+                self._seed_cycle = MAP_SEEDS.copy()
+                self._map_seed_rng.shuffle(self._seed_cycle)
+            map_seed = self._seed_cycle.pop()
 
         self._episode_index += 1
-        self._last_map_seed = map_seed
         self.env = (
             require_kaggle_env(debug=True, configuration={"randomSeed": int(map_seed)})
             if self.require_kaggle

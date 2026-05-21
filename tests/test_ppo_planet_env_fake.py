@@ -150,3 +150,5 @@ def test_reset_uses_new_random_map_seed_for_each_game(monkeypatch):
     assert calls[0]["debug"] is True
     assert calls[1]["debug"] is True
     assert calls[0]["configuration"]["randomSeed"] != calls[1]["configuration"]["randomSeed"]
+    assert calls[0]["configuration"]["randomSeed"] in ppo_planet_env.MAP_SEEDS
+    assert calls[1]["configuration"]["randomSeed"] in ppo_planet_env.MAP_SEEDS
