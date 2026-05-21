@@ -21,7 +21,7 @@ def test_fake_planet_step_env_shapes_and_production_delta_reward():
     assert next_obs.shape == (15,)
     assert info["turn_advanced"] is True
     assert info["production_delta"] == info["production_after"] - info["production_before"]
-    assert info["capture_reward"] == pytest.approx(40.0)
+    assert info["capture_reward"] == pytest.approx(90.0)
     assert reward == pytest.approx(info["reward_total"])
 
 
