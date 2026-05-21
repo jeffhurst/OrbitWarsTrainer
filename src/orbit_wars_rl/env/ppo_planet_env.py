@@ -7,35 +7,11 @@ from typing import Any
 
 try:
     import numpy as np
-except Exception:  # pragma: no cover - minimal non-RL installations.
-    class _MiniArray(list):
-        @property
-        def shape(self):
-            return (len(self),)
-
-        def reshape(self, *shape):
-            return self
-
-        def tolist(self):
-            return list(self)
-
-    class _MiniNumpy:
-        inf = float("inf")
-        float32 = float
-
-        @staticmethod
-        def asarray(value, dtype=None):
-            return _MiniArray(float(v) for v in value)
-
-        @staticmethod
-        def zeros(shape, dtype=None):
-            return _MiniArray(0.0 for _ in range(shape[0]))
-
-        @staticmethod
-        def full(shape, value, dtype=None):
-            return _MiniArray(float(value) for _ in range(shape[0]))
-
-    np = _MiniNumpy()  # type: ignore[assignment]
+except Exception as exc:  # pragma: no cover - exercised only when numpy is missing/broken.
+    raise RuntimeError(
+        "OrbitWarsPlanetStepEnv requires NumPy. Install dependencies with "
+        "`pip install -e .` (or at least `pip install numpy`)."
+    ) from exc
 
 try:  # Keep non-RL imports usable when gymnasium is not installed.
     import gymnasium as gym
