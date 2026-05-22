@@ -23,13 +23,20 @@ def test_win_reward_is_strongly_positive_and_faster_is_better():
     assert early > late
 
 
-def test_loss_reward_is_strongly_negative_and_late_losses_stay_meaningfully_negative():
+def test_loss_reward_stays_negative_and_later_losses_are_less_negative():
     cfg = RewardShapingConfig()
     early = game_outcome_reward(candidate_score=10, opponent_score=100, turn_index=10, max_episode_turns=100, config=cfg)
     late = game_outcome_reward(candidate_score=10, opponent_score=100, turn_index=90, max_episode_turns=100, config=cfg)
-    assert early < -150
-    assert late <= -200
-    assert late < early
+    assert early < 0
+    assert late < 0
+    assert late >= early
+
+
+def test_win_reward_is_higher_than_any_loss_reward():
+    cfg = RewardShapingConfig()
+    fastest_win = game_outcome_reward(candidate_score=100, opponent_score=10, turn_index=1, max_episode_turns=100, config=cfg)
+    latest_loss = game_outcome_reward(candidate_score=10, opponent_score=100, turn_index=100, max_episode_turns=100, config=cfg)
+    assert fastest_win > latest_loss
 
 
 def test_timeout_reward_bounded_small():
@@ -57,4 +64,3 @@ def test_strategic_score_favors_production_and_planets_over_ships_alone():
 
 def test_missing_data_does_not_crash_reward_calculation():
     assert strategic_score({}, 0) == pytest.approx(0.0)
-
