@@ -438,6 +438,12 @@ class OrbitWarsPlanetStepEnv(gym.Env):
                     max_episode_turns=self.max_episode_turns,
                     config=self.reward_config,
                 )
+            if (
+                self.current_map_seed is not None
+                and candidate_score < opponent_score
+                and self.current_map_seed not in self._seed_cycle
+            ):
+                self._seed_cycle.insert(0, self.current_map_seed)
             reward = float(reward + terminal_reward)
         scaled_reward = float(reward * self.reward_config.reward_scale)
         self.episode_turn_count = self.turn_index
