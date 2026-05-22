@@ -14,6 +14,7 @@ class RewardShapingConfig:
     timeout_min_reward: float = -60.0
     timeout_max_reward: float = 60.0
     fast_win_bonus: float = 140.0
+    loss_survival_bonus: float = 120.0
 
     production_adv_weight: float = 55.0
     planet_adv_weight: float = 55.0
@@ -94,7 +95,7 @@ def game_outcome_reward(*, candidate_score: float, opponent_score: float, turn_i
         return float(cfg.win_reward + win_speed_bonus(turn_index, max_episode_turns, cfg))
     if candidate_score < opponent_score:
         progress = min(max(turn_index, 1), max_episode_turns) / max(1, max_episode_turns)
-        return float(cfg.loss_penalty - 200.0 * progress)
+        return float(cfg.loss_penalty + cfg.loss_survival_bonus * progress)
     return 0.0
 
 
