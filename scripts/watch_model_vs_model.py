@@ -16,11 +16,12 @@ def main() -> None:
     parser.add_argument("--opponent", required=True, help="Path to the player 1 model/policy file.")
     parser.add_argument("--out-dir", default="runs/watch", help="Directory for replay artifacts.")
     parser.add_argument("--name", default="model_vs_model", help="Replay artifact basename.")
+    parser.add_argument("--seed", type=int, default=None, help="Kaggle map seed to force a specific map layout.")
     args = parser.parse_args()
 
     agent = ModelAgent(policy=load_policy(args.model))
     opponent = ModelAgent(policy=load_policy(args.opponent))
-    paths = watch_agents(agent.act, opponent.act, out_dir=args.out_dir, name=args.name)
+    paths = watch_agents(agent.act, opponent.act, out_dir=args.out_dir, name=args.name, seed=args.seed)
     for path in paths:
         print(f"wrote {path}")
 
