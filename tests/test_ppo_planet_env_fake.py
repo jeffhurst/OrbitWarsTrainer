@@ -1,5 +1,7 @@
 import pytest
 
+from orbit_wars_rl.core.candidates import CandidateConfig
+from orbit_wars_rl.core.observations import ObservationBuilder
 from orbit_wars_rl.env.ppo_planet_env import OrbitWarsPlanetStepEnv, _FakeOrbitWarsBackend
 
 
@@ -23,6 +25,30 @@ def test_fake_planet_step_env_shapes_and_production_delta_reward():
     assert info["production_delta"] == info["production_after"] - info["production_before"]
     assert info["capture_reward"] == pytest.approx(90.0)
     assert reward == pytest.approx(info["reward_total"])
+
+
+def test_planet_step_env_observes_and_decodes_filtered_candidates():
+    env = OrbitWarsPlanetStepEnv(require_kaggle=False, max_episode_turns=4)
+    env.reset(seed=123)
+    env.candidate_config = CandidateConfig(static_radius=120)
+    env.builder = ObservationBuilder(env.candidate_config)
+    env.obs = {
+        "player": 0,
+        "planets": [
+            [0, 0, 0, 50, 5, 10, 1],
+            [1, 1, 100, 50, 5, 1, 9],
+            [2, 1, 0, 80, 5, 2, 6],
+        ],
+        "fleets": [],
+    }
+    env.previous_total_production = 1.0
+    env._rebuild_sources()
+
+    current_obs = env._current_obs()
+    _next_obs, _reward, _terminated, _truncated, info = env.step([5, 0, 0, 0])
+
+    assert current_obs[3:6].tolist() == [-1, -2, 6]
+    assert len(info["buffered_actions"]) == 1
 
 
 def test_fake_planet_step_env_loads_model_opponent(tmp_path):
@@ -96,7 +122,7 @@ def test_fake_planet_step_env_adds_early_win_terminal_bonus(monkeypatch):
 
     assert terminated is True
     assert truncated is False
-    assert info["terminal_reward"] == pytest.approx(240.0 + 140.0 * (3 / 4))
+    assert info["terminal_reward"] == pytest.approx(600.0 + 300.0 * (3 / 4))
     assert reward == pytest.approx(info["reward_total"])
 
 

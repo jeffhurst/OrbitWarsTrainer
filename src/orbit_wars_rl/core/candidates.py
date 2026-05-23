@@ -93,12 +93,15 @@ def select_candidates(
             seen.add(p.id)
 
     combined = static + orbiting
+    candidate_group = {p.id: 0 for p in static}
+    candidate_group.update({p.id: 1 for p in orbiting})
     combined.sort(
         key=lambda p: (
             p.ships,
             0 if p.owner != player else 1,
-            p.production,
             owner_priority(p, player),
+            candidate_group[p.id],
+            -p.production,
             distance(source, p),
             p.id,
         )

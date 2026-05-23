@@ -4,7 +4,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from orbit_wars_rl.training.ppo_config import PPOTrainConfig
-from orbit_wars_rl.training.callbacks import EpisodeComponentLogger
+from orbit_wars_rl.training.callbacks import (
+    DeterministicMapSeedEvalCallback,
+    EpisodeComponentLogger,
+)
 
 
 def parse_net_arch(value: str) -> tuple[int, ...]:
@@ -21,9 +24,10 @@ def train_ppo(config: PPOTrainConfig) -> Path:
     """Train a single-env CPU PPO model and save it as an SB3 .zip artifact."""
     config.validate()
     from stable_baselines3 import PPO
+    from stable_baselines3.common.callbacks import CallbackList
     import torch as th
 
-    from orbit_wars_rl.env.ppo_planet_env import OrbitWarsPlanetStepEnv
+    from orbit_wars_rl.env.ppo_planet_env import MAP_SEEDS, OrbitWarsPlanetStepEnv
 
     env = OrbitWarsPlanetStepEnv(
         opponent=config.opponent,
@@ -65,7 +69,29 @@ def train_ppo(config: PPOTrainConfig) -> Path:
         device="cpu",
         target_kl=0.03,
     )
-    model.learn(total_timesteps=config.timesteps, progress_bar=False, callback=EpisodeComponentLogger())
+    callbacks = [EpisodeComponentLogger()]
+    if config.deterministic_eval:
+        eval_seeds = (
+            MAP_SEEDS[: config.eval_seed_limit]
+            if config.eval_seed_limit is not None
+            else MAP_SEEDS
+        )
+        callbacks.append(
+            DeterministicMapSeedEvalCallback(
+                map_seeds=eval_seeds,
+                require_kaggle=config.require_kaggle,
+                opponent=config.opponent,
+                opponent_model=config.opponent_model,
+                candidate_player=config.candidate_player,
+                max_episode_turns=config.max_episode_turns,
+                eval_freq_rollouts=config.eval_freq_rollouts,
+            )
+        )
+    model.learn(
+        total_timesteps=config.timesteps,
+        progress_bar=False,
+        callback=CallbackList(callbacks),
+    )
     out = Path(config.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     model.save(str(out))

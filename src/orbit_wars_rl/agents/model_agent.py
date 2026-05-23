@@ -43,12 +43,15 @@ class ModelAgent:
             obs, player, angular_velocity=angular_velocity, fleet_speed=fleet_speed
         )
         for source in [p for p in planets if p.owner == player and p.id not in comet_ids]:
-            model_obs, chosen = builder.build_for_source(
+            model_obs, chosen, proposed_launches = builder.build_filtered_for_source(
                 source,
                 planets,
                 player,
                 previous_total_production=previous_total,
                 comet_ids=comet_ids,
+                angular_velocity=angular_velocity,
+                fleet_speed=fleet_speed,
+                sun_radius=sun_radius,
             )
             outputs = self.policy.predict(model_obs)
             actions.extend(
@@ -60,6 +63,7 @@ class ModelAgent:
                     angular_velocity=angular_velocity,
                     fleet_speed=fleet_speed,
                     sun_radius=sun_radius,
+                    precomputed_launches=proposed_launches,
                 )
             )
         return rows(actions)

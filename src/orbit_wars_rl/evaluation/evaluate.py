@@ -3,11 +3,11 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 from orbit_wars_rl.core.planets import total_production
 from orbit_wars_rl.core.types import parse_planets
-from orbit_wars_rl.env.ppo_planet_env import OrbitWarsPlanetStepEnv
+from orbit_wars_rl.env.ppo_planet_env import MAP_SEEDS, OrbitWarsPlanetStepEnv
 from orbit_wars_rl.models.save_load import load_policy
 from orbit_wars_rl.training.reward import player_score
 
@@ -22,6 +22,98 @@ def _write_metrics(metrics: dict[str, Any], out_dir: str | Path) -> Path:
 
 def _mean(values: list[float], default: float = 0.0) -> float:
     return sum(values) / len(values) if values else default
+
+
+def _predict_deterministic(policy, obs):
+    try:
+        prediction = policy.predict(obs, deterministic=True)
+    except TypeError:
+        prediction = policy.predict(obs)
+    if isinstance(prediction, tuple):
+        return prediction[0]
+    return prediction
+
+
+def evaluate_map_seeds_deterministic(
+    policy,
+    map_seeds: Sequence[int] | None = None,
+    *,
+    require_kaggle: bool = True,
+    opponent: str = "starter",
+    opponent_model: str | Path | None = None,
+    candidate_player: int = 0,
+    max_episode_turns: int = 500,
+    verbose: bool = False,
+) -> tuple[dict[str, float], list[dict[str, float]]]:
+    seeds = [int(seed) for seed in (MAP_SEEDS if map_seeds is None else map_seeds)]
+    if verbose:
+        print(f"[Evaluating {len(seeds)} seeds]")
+
+    results: list[dict[str, float]] = []
+    for index, map_seed in enumerate(seeds, start=1):
+        env = OrbitWarsPlanetStepEnv(
+            opponent=opponent,
+            opponent_model=opponent_model,
+            candidate_player=candidate_player,
+            require_kaggle=require_kaggle,
+            seed=map_seed,
+            max_episode_turns=max_episode_turns,
+        )
+        obs, _info = env.reset(options={"map_seed": map_seed})
+        done = False
+        turns = 0
+        terminal_reward = 0.0
+        total_reward = 0.0
+        while not done:
+            action = _predict_deterministic(policy, obs)
+            obs, reward, terminated, truncated, info = env.step(action)
+            total_reward += float(reward)
+            if info.get("turn_advanced"):
+                turns = int(info.get("turn_index", turns + 1))
+            done = bool(terminated or truncated)
+            if done:
+                terminal_reward = float(info.get("terminal_reward", 0.0))
+
+        result = {
+            "map_seed": float(map_seed),
+            "win_rate_deterministic": 1.0 if terminal_reward > 0.0 else 0.0,
+            "avg_turns": float(turns),
+            "avg_terminal_reward": terminal_reward,
+            "total_reward": total_reward,
+        }
+        results.append(result)
+        if verbose:
+            print(f"eval/map_seed_{index}: {map_seed}")
+            print(
+                "  "
+                f"eval/map_seed_{map_seed}/win_rate_deterministic: "
+                f"{result['win_rate_deterministic']:.4f}"
+            )
+            print(f"  eval/map_seed_{map_seed}/avg_turns: {result['avg_turns']:.4f}")
+            print(
+                "  "
+                f"eval/map_seed_{map_seed}/avg_terminal_reward: "
+                f"{result['avg_terminal_reward']:.4f}"
+            )
+
+    metrics: dict[str, float] = {
+        "eval/map_seed/win_rate_deterministic": _mean(
+            [result["win_rate_deterministic"] for result in results]
+        ),
+        "eval/map_seed/avg_turns": _mean([result["avg_turns"] for result in results]),
+        "eval/map_seed/avg_terminal_reward": _mean(
+            [result["avg_terminal_reward"] for result in results]
+        ),
+    }
+    for index, result in enumerate(results, start=1):
+        seed = int(result["map_seed"])
+        metrics[f"eval/map_seed_{index}"] = float(seed)
+        metrics[f"eval/map_seed_{seed}/win_rate_deterministic"] = result[
+            "win_rate_deterministic"
+        ]
+        metrics[f"eval/map_seed_{seed}/avg_turns"] = result["avg_turns"]
+        metrics[f"eval/map_seed_{seed}/avg_terminal_reward"] = result["avg_terminal_reward"]
+    return metrics, results
 
 
 def _evaluate_planet_step(

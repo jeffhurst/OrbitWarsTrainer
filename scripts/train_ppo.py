@@ -28,11 +28,29 @@ def main() -> None:
     parser.add_argument("--vf-coef", type=float, default=defaults.vf_coef)
     parser.add_argument("--max-grad-norm", type=float, default=defaults.max_grad_norm)
     parser.add_argument("--net-arch", default=",".join(str(width) for width in defaults.net_arch))
-    parser.add_argument("--opponent", choices=("starter", "random", "greedy", "hard", "model"), default=defaults.opponent)
+    parser.add_argument(
+        "--opponent",
+        choices=("starter", "random", "greedy", "hard", "model"),
+        default=defaults.opponent,
+    )
     parser.add_argument("--opponent-model", default=defaults.opponent_model)
     parser.add_argument("--candidate-player", type=int, default=defaults.candidate_player)
     parser.add_argument("--max-episode-turns", type=int, default=defaults.max_episode_turns)
     parser.add_argument("--tensorboard-log", default=defaults.tensorboard_log)
+    parser.add_argument("--eval-freq-rollouts", type=int, default=defaults.eval_freq_rollouts)
+    parser.add_argument("--eval-seed-limit", type=int, default=defaults.eval_seed_limit)
+    eval_group = parser.add_mutually_exclusive_group()
+    eval_group.add_argument(
+        "--deterministic-eval",
+        dest="deterministic_eval",
+        action="store_true",
+        default=defaults.deterministic_eval,
+    )
+    eval_group.add_argument(
+        "--no-deterministic-eval",
+        dest="deterministic_eval",
+        action="store_false",
+    )
     parser.add_argument(
         "--verbose",
         type=int,
@@ -41,7 +59,12 @@ def main() -> None:
         help="SB3 verbosity: 0=no output, 1=training stats table, 2=debug-level details.",
     )
     group = parser.add_mutually_exclusive_group()
-    group.add_argument("--require-kaggle", dest="require_kaggle", action="store_true", default=defaults.require_kaggle)
+    group.add_argument(
+        "--require-kaggle",
+        dest="require_kaggle",
+        action="store_true",
+        default=defaults.require_kaggle,
+    )
     group.add_argument("--no-require-kaggle", dest="require_kaggle", action="store_false")
     args = parser.parse_args()
 
@@ -72,6 +95,9 @@ def main() -> None:
         require_kaggle=args.require_kaggle,
         tensorboard_log=args.tensorboard_log if args.tensorboard_log else None,
         verbose=args.verbose,
+        deterministic_eval=args.deterministic_eval,
+        eval_freq_rollouts=args.eval_freq_rollouts,
+        eval_seed_limit=args.eval_seed_limit,
     )
     print(f"wrote {train_ppo(config)}")
 
