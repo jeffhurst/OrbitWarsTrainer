@@ -36,6 +36,8 @@ def test_ppo_config_model_opponent_requires_model_path():
         {"opponent": "model"},
         {"net_arch": ()},
         {"net_arch": (64, 0)},
+        {"eval_freq_rollouts": 0},
+        {"eval_seed_limit": 0},
     ],
 )
 def test_ppo_config_validation_rejects_unsupported_values(kwargs):

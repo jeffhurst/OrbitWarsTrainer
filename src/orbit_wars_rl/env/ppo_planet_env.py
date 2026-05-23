@@ -54,7 +54,6 @@ from orbit_wars_rl.agents.starter_agent import StarterAgent
 from orbit_wars_rl.core.actions import (
     ActionDecodeConfig,
     decode_model_outputs,
-    filter_candidates_with_valid_trajectories,
 )
 from orbit_wars_rl.core.candidates import CandidateConfig, comet_ids_from_obs
 from orbit_wars_rl.core.geometry import sun_collision_radius_from_obs
@@ -324,22 +323,8 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         if not self.sources:
             return self._advance_turn([])
         source = self.sources[self.current_source_index]
-        planets = parse_planets(self.obs)
-        comet_ids = comet_ids_from_obs(self.obs)
-        _model_obs, chosen = self.builder.build_for_source(
-            source,
-            planets,
-            self.candidate_player,
-            previous_total_production=self.previous_total_production,
-            comet_ids=comet_ids,
-        )
-        filtered_candidates, proposed_launches = filter_candidates_with_valid_trajectories(
-            source,
-            chosen,
-            angular_velocity=float(self.obs.get("angular_velocity", 0.0)),
-            fleet_speed=float(self.obs.get("fleet_speed", 1.0)),
-            sun_radius=sun_collision_radius_from_obs(self.obs),
-            max_candidates=self.candidate_config.max_candidates,
+        _model_obs, filtered_candidates, proposed_launches = self._current_obs_and_candidates(
+            source
         )
         decoded = decode_model_outputs(
             source,
@@ -546,7 +531,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
                     "reward/local_action": send_reward,
                     "reward/total": scaled_reward,
                     "reward/episode_return": float(self.episode_return_scaled),
-                    "game/win_rate": win_rate,
+                    "train_rollout/stochastic_win_rate": win_rate,
                     "game/loss_rate": loss_rate,
                     "game/timeout_rate": timeout_rate,
                     "game/avg_turns": float(self.episode_turn_count),
@@ -614,11 +599,20 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         if not self.sources:
             return np.zeros((15,), dtype=np.float32)
         source = self.sources[min(self.current_source_index, len(self.sources) - 1)]
-        vec, _chosen = self.builder.build_for_source(
+        vec, _chosen, _launches = self._current_obs_and_candidates(source)
+        return vec
+
+    def _current_obs_and_candidates(
+        self, source: Planet
+    ) -> tuple[np.ndarray, list[Planet], list]:
+        vec, chosen, launches = self.builder.build_filtered_for_source(
             source,
             parse_planets(self.obs),
             self.candidate_player,
             previous_total_production=self.previous_total_production,
             comet_ids=comet_ids_from_obs(self.obs),
+            angular_velocity=float(self.obs.get("angular_velocity", 0.0)),
+            fleet_speed=float(self.obs.get("fleet_speed", 1.0)),
+            sun_radius=sun_collision_radius_from_obs(self.obs),
         )
-        return np.asarray(list(vec), dtype=np.float32)
+        return np.asarray(list(vec), dtype=np.float32), chosen, launches

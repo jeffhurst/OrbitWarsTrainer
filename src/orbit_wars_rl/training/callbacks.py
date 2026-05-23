@@ -2,12 +2,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Sequence
 
 try:
     from stable_baselines3.common.callbacks import BaseCallback
 except Exception:  # pragma: no cover
     class BaseCallback:  # type: ignore[override]
-        pass
+        def __init__(self, *args, **kwargs):
+            del args, kwargs
 
 
 @dataclass(slots=True)
@@ -37,7 +40,7 @@ class EpisodeComponentLogger(BaseCallback):
                 "reward/local_action",
                 "reward/total",
                 "reward/episode_return",
-                "game/win_rate",
+                "train_rollout/stochastic_win_rate",
                 "game/loss_rate",
                 "game/timeout_rate",
                 "game/avg_turns",
@@ -60,4 +63,53 @@ class EpisodeComponentLogger(BaseCallback):
                         print(f"  {key}: {float(value):.4f}")
                     else:
                         print(f"  {key}: {value}")
+        return True
+
+
+class DeterministicMapSeedEvalCallback(BaseCallback):
+    """Run deterministic policy evaluation across fixed map seeds after rollouts."""
+
+    def __init__(
+        self,
+        *,
+        map_seeds: Sequence[int],
+        require_kaggle: bool,
+        opponent: str = "starter",
+        opponent_model: str | Path | None = None,
+        candidate_player: int = 0,
+        max_episode_turns: int = 500,
+        eval_freq_rollouts: int = 1,
+        verbose: int = 0,
+    ):
+        super().__init__(verbose=verbose)
+        self.map_seeds = [int(seed) for seed in map_seeds]
+        self.require_kaggle = require_kaggle
+        self.opponent = opponent
+        self.opponent_model = opponent_model
+        self.candidate_player = candidate_player
+        self.max_episode_turns = max_episode_turns
+        self.eval_freq_rollouts = max(1, int(eval_freq_rollouts))
+        self.rollout_count = 0
+
+    def _on_rollout_end(self) -> None:
+        self.rollout_count += 1
+        if self.rollout_count % self.eval_freq_rollouts != 0:
+            return
+
+        from orbit_wars_rl.evaluation.evaluate import evaluate_map_seeds_deterministic
+
+        metrics, _results = evaluate_map_seeds_deterministic(
+            self.model,
+            self.map_seeds,
+            require_kaggle=self.require_kaggle,
+            opponent=self.opponent,
+            opponent_model=self.opponent_model,
+            candidate_player=self.candidate_player,
+            max_episode_turns=self.max_episode_turns,
+            verbose=True,
+        )
+        for key, value in metrics.items():
+            self.logger.record(key, float(value))
+
+    def _on_step(self) -> bool:
         return True
