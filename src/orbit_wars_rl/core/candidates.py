@@ -71,6 +71,7 @@ def select_candidates(
     comets = comet_ids or set()
     src_q = quadrant_of(source.x, source.y, cfg.quadrant_config)
     wanted_q = counterclockwise_quadrant(src_q, cfg.quadrant_config)
+    source_orbiting = is_orbiting_planet(source, cfg.center, cfg.rotation_radius_limit)
     static: list[Planet] = []
     orbiting: list[Planet] = []
     seen: set[int] = set()
@@ -79,15 +80,29 @@ def select_candidates(
         if p.id == source.id or p.id in seen or is_comet(p, comets):
             continue
         orbiting_p = is_orbiting_planet(p, cfg.center, cfg.rotation_radius_limit)
-        if not orbiting_p and distance(source, p) <= cfg.static_radius:
-            static.append(p)
-            seen.add(p.id)
+        if not orbiting_p:
+            if source_orbiting:
+                if quadrant_of(p.x, p.y, cfg.quadrant_config) == src_q:
+                    static.append(p)
+                    seen.add(p.id)
+            elif distance(source, p) <= cfg.static_radius:
+                static.append(p)
+                seen.add(p.id)
         elif orbiting_p and quadrant_of(p.x, p.y, cfg.quadrant_config) == wanted_q:
             orbiting.append(p)
             seen.add(p.id)
 
     combined = static + orbiting
-    combined.sort(key=lambda p: (-p.production, owner_priority(p, player), distance(source, p), p.id))
+    combined.sort(
+        key=lambda p: (
+            p.ships,
+            0 if p.owner != player else 1,
+            p.production,
+            owner_priority(p, player),
+            distance(source, p),
+            p.id,
+        )
+    )
     selected = combined[: cfg.max_candidates]
     LOGGER.debug(
         "source=%s static=%s orbiting=%s selected=%s",
