@@ -51,7 +51,11 @@ from orbit_wars_rl.agents.heuristic_agent import GreedyAgent, HardAgent
 from orbit_wars_rl.agents.model_agent import ModelAgent
 from orbit_wars_rl.agents.random_agent import RandomAgent
 from orbit_wars_rl.agents.starter_agent import StarterAgent
-from orbit_wars_rl.core.actions import ActionDecodeConfig, decode_model_outputs
+from orbit_wars_rl.core.actions import (
+    ActionDecodeConfig,
+    decode_model_outputs,
+    filter_candidates_with_valid_trajectories,
+)
 from orbit_wars_rl.core.candidates import CandidateConfig, comet_ids_from_obs
 from orbit_wars_rl.core.geometry import sun_collision_radius_from_obs
 from orbit_wars_rl.core.observations import ObservationBuilder
@@ -312,33 +316,43 @@ class OrbitWarsPlanetStepEnv(gym.Env):
             previous_total_production=self.previous_total_production,
             comet_ids=comet_ids,
         )
-        decoded = decode_model_outputs(
+        filtered_candidates, proposed_launches = filter_candidates_with_valid_trajectories(
             source,
             chosen,
+            angular_velocity=float(self.obs.get("angular_velocity", 0.0)),
+            fleet_speed=float(self.obs.get("fleet_speed", 1.0)),
+            sun_radius=sun_collision_radius_from_obs(self.obs),
+            max_candidates=self.candidate_config.max_candidates,
+        )
+        decoded = decode_model_outputs(
+            source,
+            filtered_candidates,
             np.asarray(action, dtype=np.float32).reshape(-1).tolist(),
             self.action_config,
             angular_velocity=float(self.obs.get("angular_velocity", 0.0)),
             fleet_speed=float(self.obs.get("fleet_speed", 1.0)),
             sun_radius=sun_collision_radius_from_obs(self.obs),
+            precomputed_launches=proposed_launches,
         )
         decoded_rows = rows(decoded)
         self.episode_action_count += 1
         self.episode_ships_sent_total += float(sum(float(row[2]) for row in decoded_rows if len(row) >= 3))
         action_values = np.asarray(action, dtype=np.float32).reshape(-1).tolist()
-        for idx, value in enumerate(action_values[: min(len(chosen), 4)]):
+        for idx, value in enumerate(action_values[: min(len(filtered_candidates), 4)]):
             if int(value) <= 0:
                 continue
             self.episode_target_choice_count += 1
-            target = chosen[idx]
+            target = filtered_candidates[idx]
             if target.owner == (1 - self.candidate_player):
                 self.episode_enemy_target_count += 1
             elif target.owner < 0:
                 self.episode_neutral_target_count += 1
             elif target.owner == self.candidate_player:
                 self.episode_self_target_count += 1
-        if any(int(v) > 0 for v in action_values[: min(len(chosen), 4)]) and not decoded_rows:
+        if any(int(v) > 0 for v in action_values[: min(len(filtered_candidates), 4)]) and not decoded_rows:
             self.episode_invalid_action_count += 1
-        send_reward = ships_sent_reward(decoded_rows, self.reward_config)
+        tactical_reward = self._source_tactical_reward(source, filtered_candidates, decoded_rows)
+        send_reward = ships_sent_reward(decoded_rows, self.reward_config) + tactical_reward
         self.buffered_actions.extend(decoded_rows)
         self.current_source_index += 1
         if self.current_source_index < len(self.sources):
@@ -530,6 +544,32 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         comet_ids = comet_ids_from_obs(self.obs)
         self.sources = [p for p in planets if p.owner == self.candidate_player and p.id not in comet_ids]
         self.current_source_index = 0
+
+    def _source_tactical_reward(self, source: Planet, candidates: list[Planet], decoded_rows: list[list[float]]) -> float:
+        non_friendly = [p for p in candidates if p.owner != self.candidate_player]
+        if not non_friendly:
+            return 0.0
+        source_ships = int(source.ships)
+        any_attackable = any(int(p.ships) < source_ships for p in non_friendly)
+        all_too_strong = all(int(p.ships) > source_ships for p in non_friendly)
+        captured = False
+        for row in decoded_rows:
+            if len(row) < 3:
+                continue
+            sent_ships = int(row[2])
+            for target in non_friendly:
+                if sent_ships > int(target.ships):
+                    captured = True
+                    break
+            if captured:
+                break
+        if captured:
+            return 0.5
+        if not decoded_rows and all_too_strong:
+            return 0.25
+        if not decoded_rows and any_attackable:
+            return -0.5
+        return 0.0
 
     def _current_source_id(self) -> int | None:
         if not self.sources:

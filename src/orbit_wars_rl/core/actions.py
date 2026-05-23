@@ -7,7 +7,7 @@ import math
 from dataclasses import dataclass
 from typing import Sequence
 
-from .geometry import DEFAULT_SUN_COLLISION_RADIUS, predict_launch, trajectory_crosses_sun
+from .geometry import DEFAULT_SUN_COLLISION_RADIUS, LaunchSolution, predict_launch, trajectory_crosses_sun
 from .types import Action, Planet
 
 LOGGER = logging.getLogger(__name__)
@@ -57,6 +57,7 @@ def decode_model_outputs(
     angular_velocity: float = 0.0,
     fleet_speed: float = 1.0,
     sun_radius: float = DEFAULT_SUN_COLLISION_RADIUS,
+    precomputed_launches: Sequence[LaunchSolution | None] | None = None,
 ) -> list[Action]:
     cfg = config or ActionDecodeConfig()
     output_len = len(outputs)
@@ -92,7 +93,11 @@ def decode_model_outputs(
             continue
         target = candidates[idx]
         fleet_speed = get_fleet_speed(ships)
-        launch = predict_launch(source, target, angular_velocity, fleet_speed)
+        launch = None
+        if precomputed_launches is not None and idx < len(precomputed_launches):
+            launch = precomputed_launches[idx]
+        if launch is None:
+            launch = predict_launch(source, target, angular_velocity, fleet_speed)
         if trajectory_crosses_sun(launch.source_xy, launch.target_xy, sun_radius=sun_radius):
             LOGGER.debug("source=%s target=%s skipped sun-crossing launch", source.id, target.id)
             continue
@@ -100,3 +105,25 @@ def decode_model_outputs(
         actions.append(Action(source.id, launch.angle, ships))
     LOGGER.debug("source=%s decoded=%s", source.id, actions)
     return actions
+
+
+def filter_candidates_with_valid_trajectories(
+    source: Planet,
+    candidates: Sequence[Planet],
+    *,
+    angular_velocity: float = 0.0,
+    fleet_speed: float = 1.0,
+    sun_radius: float = DEFAULT_SUN_COLLISION_RADIUS,
+    max_candidates: int = 4,
+) -> tuple[list[Planet], list[LaunchSolution]]:
+    valid_candidates: list[Planet] = []
+    launches: list[LaunchSolution] = []
+    for target in candidates:
+        if len(valid_candidates) >= max_candidates:
+            break
+        launch = predict_launch(source, target, angular_velocity, fleet_speed)
+        if trajectory_crosses_sun(launch.source_xy, launch.target_xy, sun_radius=sun_radius):
+            continue
+        valid_candidates.append(target)
+        launches.append(launch)
+    return valid_candidates, launches
