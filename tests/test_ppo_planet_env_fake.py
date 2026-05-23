@@ -149,9 +149,9 @@ def test_reset_uses_new_random_map_seed_for_each_game(monkeypatch):
     assert len(calls) == 2
     assert calls[0]["debug"] is True
     assert calls[1]["debug"] is True
-    assert calls[0]["configuration"]["randomSeed"] != calls[1]["configuration"]["randomSeed"]
-    assert calls[0]["configuration"]["randomSeed"] in ppo_planet_env.MAP_SEEDS
-    assert calls[1]["configuration"]["randomSeed"] in ppo_planet_env.MAP_SEEDS
+    assert calls[0]["configuration"]["seed"] != calls[1]["configuration"]["seed"]
+    assert calls[0]["configuration"]["seed"] in ppo_planet_env.MAP_SEEDS
+    assert calls[1]["configuration"]["seed"] in ppo_planet_env.MAP_SEEDS
 
 
 def test_episode_components_have_no_pressure_or_waste_and_reward_totals_match():
@@ -165,3 +165,16 @@ def test_episode_components_have_no_pressure_or_waste_and_reward_totals_match():
     assert "game/map_seed" in components
     assert components["reward/total"] == pytest.approx(reward)
     assert reset_info["map_seed"] == int(components["game/map_seed"])
+
+
+def test_source_tactical_reward_rewards_saving_and_penalizes_missed_attacks():
+    from orbit_wars_rl.core.types import Planet
+
+    env = OrbitWarsPlanetStepEnv(require_kaggle=False)
+    source = Planet(0, 0, 80, 80, 2.0, 10, 1.0)
+    strong_enemy = Planet(1, 1, 82, 80, 2.0, 11, 1.0)
+    weak_enemy = Planet(2, 1, 83, 80, 2.0, 9, 1.0)
+
+    assert env._source_tactical_reward(source, [strong_enemy], []) > 0.0
+    assert env._source_tactical_reward(source, [weak_enemy], []) < 0.0
+    assert env._source_tactical_reward(source, [weak_enemy], [[0, 0.0, 10]]) > 0.0

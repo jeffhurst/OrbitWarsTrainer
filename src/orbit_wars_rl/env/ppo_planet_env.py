@@ -51,7 +51,11 @@ from orbit_wars_rl.agents.heuristic_agent import GreedyAgent, HardAgent
 from orbit_wars_rl.agents.model_agent import ModelAgent
 from orbit_wars_rl.agents.random_agent import RandomAgent
 from orbit_wars_rl.agents.starter_agent import StarterAgent
-from orbit_wars_rl.core.actions import ActionDecodeConfig, decode_model_outputs
+from orbit_wars_rl.core.actions import (
+    ActionDecodeConfig,
+    decode_model_outputs,
+    filter_candidates_with_valid_trajectories,
+)
 from orbit_wars_rl.core.candidates import CandidateConfig, comet_ids_from_obs
 from orbit_wars_rl.core.geometry import sun_collision_radius_from_obs
 from orbit_wars_rl.core.observations import ObservationBuilder
@@ -81,6 +85,7 @@ from orbit_wars_rl.training.reward import (
     ships_sent_reward,
     strategic_score,
     timeout_outcome_reward,
+    win_speed_bonus,
 )
 
 
@@ -192,6 +197,20 @@ def _is_kaggle_done(env: Any) -> bool:
     return False
 
 
+def _terminal_state_rewards(env: Any) -> tuple[float, float] | None:
+    """Return final per-player rewards from Kaggle state when available."""
+    state = getattr(env, "state", None)
+    if not state or len(state) < 2:
+        return None
+    rewards: list[float] = []
+    for slot in state[:2]:
+        value = slot.get("reward") if isinstance(slot, dict) else getattr(slot, "reward", None)
+        if value is None:
+            return None
+        rewards.append(float(value))
+    return (rewards[0], rewards[1])
+
+
 class OrbitWarsPlanetStepEnv(gym.Env):
     """Each SB3 step controls one owned planet; full Kaggle turn advances after all sources."""
 
@@ -249,6 +268,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         self.episode_turn_count = 0
         self.episode_enemy_captures = 0
         self.episode_neutral_captures = 0
+        self.episode_return_scaled = 0.0
         self.current_map_seed: int | None = None
 
     def reset(self, *, seed: int | None = None, options: dict | None = None):
@@ -293,6 +313,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         self.episode_turn_count = 0
         self.episode_enemy_captures = 0
         self.episode_neutral_captures = 0
+        self.episode_return_scaled = 0.0
         self._rebuild_sources()
         self.previous_total_production = total_production(parse_planets(self.obs), self.candidate_player)
         return self._current_obs(), {"source_id": self._current_source_id(), "no_source": not self.sources, "map_seed": map_seed}
@@ -312,33 +333,43 @@ class OrbitWarsPlanetStepEnv(gym.Env):
             previous_total_production=self.previous_total_production,
             comet_ids=comet_ids,
         )
-        decoded = decode_model_outputs(
+        filtered_candidates, proposed_launches = filter_candidates_with_valid_trajectories(
             source,
             chosen,
+            angular_velocity=float(self.obs.get("angular_velocity", 0.0)),
+            fleet_speed=float(self.obs.get("fleet_speed", 1.0)),
+            sun_radius=sun_collision_radius_from_obs(self.obs),
+            max_candidates=self.candidate_config.max_candidates,
+        )
+        decoded = decode_model_outputs(
+            source,
+            filtered_candidates,
             np.asarray(action, dtype=np.float32).reshape(-1).tolist(),
             self.action_config,
             angular_velocity=float(self.obs.get("angular_velocity", 0.0)),
             fleet_speed=float(self.obs.get("fleet_speed", 1.0)),
             sun_radius=sun_collision_radius_from_obs(self.obs),
+            precomputed_launches=proposed_launches,
         )
         decoded_rows = rows(decoded)
         self.episode_action_count += 1
         self.episode_ships_sent_total += float(sum(float(row[2]) for row in decoded_rows if len(row) >= 3))
         action_values = np.asarray(action, dtype=np.float32).reshape(-1).tolist()
-        for idx, value in enumerate(action_values[: min(len(chosen), 4)]):
+        for idx, value in enumerate(action_values[: min(len(filtered_candidates), 4)]):
             if int(value) <= 0:
                 continue
             self.episode_target_choice_count += 1
-            target = chosen[idx]
+            target = filtered_candidates[idx]
             if target.owner == (1 - self.candidate_player):
                 self.episode_enemy_target_count += 1
             elif target.owner < 0:
                 self.episode_neutral_target_count += 1
             elif target.owner == self.candidate_player:
                 self.episode_self_target_count += 1
-        if any(int(v) > 0 for v in action_values[: min(len(chosen), 4)]) and not decoded_rows:
+        if any(int(v) > 0 for v in action_values[: min(len(filtered_candidates), 4)]) and not decoded_rows:
             self.episode_invalid_action_count += 1
-        send_reward = ships_sent_reward(decoded_rows, self.reward_config)
+        tactical_reward = self._source_tactical_reward(source, filtered_candidates, decoded_rows)
+        send_reward = ships_sent_reward(decoded_rows, self.reward_config) + tactical_reward
         self.buffered_actions.extend(decoded_rows)
         self.current_source_index += 1
         if self.current_source_index < len(self.sources):
@@ -414,6 +445,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         team_reward = float(dense_reward + capture_reward + invalid_action_penalty)
         reward = float(team_reward / num_owned_planets)
         terminal_reward = 0.0
+        state_rewards: tuple[float, float] | None = None
         self.previous_total_production = current_total
         buffered = list(candidate_actions)
         self.buffered_actions = []
@@ -428,16 +460,29 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         if terminated or truncated:
             candidate_score = player_score(self.obs, self.candidate_player)
             opponent_score = player_score(self.obs, opponent_player)
+            state_rewards = _terminal_state_rewards(self.env)
             if truncated and not terminated:
                 terminal_reward = timeout_outcome_reward(candidate_score, opponent_score, self.reward_config)
             else:
-                terminal_reward = game_outcome_reward(
-                    candidate_score=candidate_score,
-                    opponent_score=opponent_score,
-                    turn_index=self.turn_index,
-                    max_episode_turns=self.max_episode_turns,
-                    config=self.reward_config,
-                )
+                if state_rewards is not None and state_rewards[0] != state_rewards[1]:
+                    candidate_state_reward = state_rewards[self.candidate_player]
+                    opponent_state_reward = state_rewards[opponent_player]
+                    if candidate_state_reward > opponent_state_reward:
+                        terminal_reward = float(
+                            self.reward_config.win_reward
+                            + win_speed_bonus(self.turn_index, self.max_episode_turns, self.reward_config)
+                        )
+                    else:
+                        progress = min(max(self.turn_index, 1), self.max_episode_turns) / max(1, self.max_episode_turns)
+                        terminal_reward = float(self.reward_config.loss_penalty + self.reward_config.loss_survival_bonus * progress)
+                else:
+                    terminal_reward = game_outcome_reward(
+                        candidate_score=candidate_score,
+                        opponent_score=opponent_score,
+                        turn_index=self.turn_index,
+                        max_episode_turns=self.max_episode_turns,
+                        config=self.reward_config,
+                    )
             if (
                 self.current_map_seed is not None
                 and candidate_score < opponent_score
@@ -446,6 +491,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
                 self._seed_cycle.insert(0, self.current_map_seed)
             reward = float(reward + terminal_reward)
         scaled_reward = float(reward * self.reward_config.reward_scale)
+        self.episode_return_scaled += scaled_reward
         self.episode_turn_count = self.turn_index
         win_rate = 1.0 if terminated and not truncated and terminal_reward > 0 else 0.0
         loss_rate = 1.0 if terminated and not truncated and terminal_reward < 0 else 0.0
@@ -463,6 +509,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
                 "capture_reward": capture_reward,
                 "send_reward": send_reward,
                 "terminal_reward": terminal_reward,
+                "terminal_state_rewards": state_rewards,
                 "buffered_actions": buffered,
                 "turn_index": self.turn_index,
                 "source_id": self._current_source_id(),
@@ -498,6 +545,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
                     "reward/capture_delta": capture_delta_reward,
                     "reward/local_action": send_reward,
                     "reward/total": scaled_reward,
+                    "reward/episode_return": float(self.episode_return_scaled),
                     "game/win_rate": win_rate,
                     "game/loss_rate": loss_rate,
                     "game/timeout_rate": timeout_rate,
@@ -530,6 +578,32 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         comet_ids = comet_ids_from_obs(self.obs)
         self.sources = [p for p in planets if p.owner == self.candidate_player and p.id not in comet_ids]
         self.current_source_index = 0
+
+    def _source_tactical_reward(self, source: Planet, candidates: list[Planet], decoded_rows: list[list[float]]) -> float:
+        non_friendly = [p for p in candidates if p.owner != self.candidate_player]
+        if not non_friendly:
+            return 0.0
+        source_ships = int(source.ships)
+        any_attackable = any(int(p.ships) < source_ships for p in non_friendly)
+        all_too_strong = all(int(p.ships) > source_ships for p in non_friendly)
+        captured = False
+        for row in decoded_rows:
+            if len(row) < 3:
+                continue
+            sent_ships = int(row[2])
+            for target in non_friendly:
+                if sent_ships > int(target.ships):
+                    captured = True
+                    break
+            if captured:
+                break
+        if captured:
+            return 0.5
+        if not decoded_rows and all_too_strong:
+            return 0.25
+        if not decoded_rows and any_attackable:
+            return -0.5
+        return 0.0
 
     def _current_source_id(self) -> int | None:
         if not self.sources:
