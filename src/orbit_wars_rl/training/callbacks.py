@@ -36,6 +36,7 @@ class EpisodeComponentLogger(BaseCallback):
                 "reward/capture",
                 "reward/local_action",
                 "reward/total",
+                "reward/episode_return",
                 "game/win_rate",
                 "game/loss_rate",
                 "game/timeout_rate",
