@@ -93,11 +93,9 @@ def decode_model_outputs(
         if ships <= 0:
             continue
         target = candidates[idx]
-        launch = None
-        if precomputed_launches is not None and idx < len(precomputed_launches):
-            launch = precomputed_launches[idx]
-        if launch is None:
-            launch = predict_launch(source, target, angular_velocity, get_fleet_speed(ships))
+        # Candidate filtering can provide coarse precomputed launches, but the final
+        # launch must be computed using the actual selected fleet size for this action.
+        launch = predict_launch(source, target, angular_velocity, get_fleet_speed(ships))
         if trajectory_crosses_sun(launch.source_xy, launch.target_xy, sun_radius=sun_radius):
             LOGGER.debug("source=%s target=%s skipped sun-crossing launch", source.id, target.id)
             continue
