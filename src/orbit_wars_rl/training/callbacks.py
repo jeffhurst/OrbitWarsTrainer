@@ -67,7 +67,7 @@ class EpisodeComponentLogger(BaseCallback):
 
 
 class DeterministicMapSeedEvalCallback(BaseCallback):
-    """Run deterministic policy evaluation across fixed map seeds after rollouts."""
+    """Run deterministic policy evaluation across fixed map seeds during training."""
 
     def __init__(
         self,
@@ -78,7 +78,7 @@ class DeterministicMapSeedEvalCallback(BaseCallback):
         opponent_model: str | Path | None = None,
         candidate_player: int = 0,
         max_episode_turns: int = 500,
-        eval_freq_rollouts: int = 1,
+        eval_freq_rollouts: int | None = None,
         verbose: int = 0,
     ):
         super().__init__(verbose=verbose)
@@ -88,14 +88,32 @@ class DeterministicMapSeedEvalCallback(BaseCallback):
         self.opponent_model = opponent_model
         self.candidate_player = candidate_player
         self.max_episode_turns = max_episode_turns
-        self.eval_freq_rollouts = max(1, int(eval_freq_rollouts))
+        if eval_freq_rollouts is None:
+            self.eval_freq_rollouts = None
+        else:
+            self.eval_freq_rollouts = int(eval_freq_rollouts)
+            if self.eval_freq_rollouts <= 0:
+                raise ValueError("eval_freq_rollouts must be > 0")
         self.rollout_count = 0
+        self._last_eval_rollout_count: int | None = None
 
     def _on_rollout_end(self) -> None:
         self.rollout_count += 1
-        if self.rollout_count % self.eval_freq_rollouts != 0:
+        if self.eval_freq_rollouts is None:
             return
+        if self.rollout_count % self.eval_freq_rollouts == 0:
+            self._run_eval()
 
+    def _on_training_end(self) -> None:
+        if self._last_eval_rollout_count == self.rollout_count:
+            return
+        self._run_eval()
+        try:
+            self.logger.dump(int(getattr(self, "num_timesteps", 0)))
+        except AttributeError:
+            pass
+
+    def _run_eval(self) -> None:
         from orbit_wars_rl.evaluation.evaluate import evaluate_map_seeds_deterministic
 
         metrics, _results = evaluate_map_seeds_deterministic(
@@ -110,6 +128,7 @@ class DeterministicMapSeedEvalCallback(BaseCallback):
         )
         for key, value in metrics.items():
             self.logger.record(key, float(value))
+        self._last_eval_rollout_count = self.rollout_count
 
     def _on_step(self) -> bool:
         return True

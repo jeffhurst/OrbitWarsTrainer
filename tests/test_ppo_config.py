@@ -1,5 +1,6 @@
 import pytest
 
+from orbit_wars_rl.env.ppo_planet_env import MAP_SEEDS
 from orbit_wars_rl.training.ppo_config import PPOTrainConfig
 from orbit_wars_rl.training.ppo_train import parse_net_arch
 
@@ -10,6 +11,9 @@ def test_ppo_config_defaults_validate():
     assert cfg.net_arch == (256, 256, 128)
     assert cfg.n_envs == 1
     assert cfg.opponent_model is None
+    assert cfg.eval_freq_rollouts is None
+    assert cfg.eval_seed_limit is None
+    assert len(MAP_SEEDS) == 128
 
 
 def test_ppo_config_supported_non_model_opponents_validate_without_model_path():

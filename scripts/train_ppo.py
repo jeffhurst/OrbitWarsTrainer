@@ -37,8 +37,18 @@ def main() -> None:
     parser.add_argument("--candidate-player", type=int, default=defaults.candidate_player)
     parser.add_argument("--max-episode-turns", type=int, default=defaults.max_episode_turns)
     parser.add_argument("--tensorboard-log", default=defaults.tensorboard_log)
-    parser.add_argument("--eval-freq-rollouts", type=int, default=defaults.eval_freq_rollouts)
-    parser.add_argument("--eval-seed-limit", type=int, default=defaults.eval_seed_limit)
+    parser.add_argument(
+        "--eval-freq-rollouts",
+        type=int,
+        default=defaults.eval_freq_rollouts,
+        help="Run deterministic eval every N completed rollouts. Omit for final-only evaluation.",
+    )
+    parser.add_argument(
+        "--eval-seed-limit",
+        type=int,
+        default=defaults.eval_seed_limit,
+        help="Limit deterministic eval to the first N fixed map seeds. Omit to evaluate all seeds.",
+    )
     eval_group = parser.add_mutually_exclusive_group()
     eval_group.add_argument(
         "--deterministic-eval",
