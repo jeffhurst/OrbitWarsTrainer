@@ -19,6 +19,7 @@ def test_train_ppo_fake_smoke(tmp_path):
             require_kaggle=False,
             tensorboard_log=None,
             verbose=0,
+            deterministic_eval=False,
         )
     )
     assert path == out

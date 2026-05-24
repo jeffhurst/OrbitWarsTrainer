@@ -20,6 +20,7 @@ def test_export_ppo_submission_imports_and_returns_actions(tmp_path):
             require_kaggle=False,
             tensorboard_log=None,
             verbose=0,
+            deterministic_eval=False,
         )
     )
     submission = tmp_path / "submission.py"

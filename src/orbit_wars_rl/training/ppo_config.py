@@ -40,7 +40,7 @@ class PPOTrainConfig:
     tensorboard_log: str | None = "runs/tensorboard"
     verbose: int = 0
     deterministic_eval: bool = True
-    eval_freq_rollouts: int = 1
+    eval_freq_rollouts: int | None = None
     eval_seed_limit: int | None = None
 
     def validate(self) -> None:
@@ -63,7 +63,7 @@ class PPOTrainConfig:
             raise ValueError("net_arch must be nonempty")
         if any((not isinstance(width, int)) or width <= 0 for width in self.net_arch):
             raise ValueError("net_arch must contain only positive integers")
-        if self.eval_freq_rollouts <= 0:
+        if self.eval_freq_rollouts is not None and self.eval_freq_rollouts <= 0:
             raise ValueError("eval_freq_rollouts must be > 0")
         if self.eval_seed_limit is not None and self.eval_seed_limit <= 0:
             raise ValueError("eval_seed_limit must be > 0 when set")
