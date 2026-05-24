@@ -5,6 +5,7 @@ from orbit_wars_rl.core.geometry import (
     distance,
     distance_xy,
     launch_angle,
+    predict_launch,
     predicted_planet_position,
 )
 from orbit_wars_rl.core.types import Planet
@@ -49,13 +50,13 @@ def test_launch_angle_current_source_to_orbiting_target_leads_rotation():
     angular_velocity = 0.05
     fleet_speed = 2.0
 
-    t = (distance_xy(src.x, src.y, target.x, target.y) - src.radius) / fleet_speed
+    t = (distance_xy(src.x, src.y, target.x, target.y) - src.radius - target.radius) / fleet_speed
     for _ in range(12):
         predicted_target_x, predicted_target_y = predicted_planet_position(
             target, t, angular_velocity
         )
         next_t = (
-            distance_xy(src.x, src.y, predicted_target_x, predicted_target_y) - src.radius
+            distance_xy(src.x, src.y, predicted_target_x, predicted_target_y) - src.radius - target.radius
         ) / fleet_speed
         if math.isclose(next_t, t, rel_tol=1e-6, abs_tol=1e-6):
             t = next_t
@@ -112,3 +113,21 @@ def test_predict_launch_sun_check_uses_current_source_not_predicted_source():
     assert launch.source_xy == (src.x, src.y)
     assert not math.isclose(launch.target_xy[0], target.x)
     assert trajectory_crosses_sun(launch.source_xy, launch.target_xy)
+
+
+def test_orbit_to_orbit_intercept_accounts_for_target_radius():
+    src = Planet(0, 1, 45, 80, 5, 50, 1)
+    target = Planet(1, 0, 70, 45, 6, 50, 1)
+    angular_velocity = 0.07
+    fleet_speed = 3.0
+
+    launch = predict_launch(src, target, angular_velocity=angular_velocity, fleet_speed=fleet_speed)
+
+    # Travel time from source edge to predicted target edge should match fleet travel.
+    path_distance = distance_xy(src.x, src.y, launch.target_xy[0], launch.target_xy[1]) - src.radius - target.radius
+    travel_time = path_distance / fleet_speed
+
+    expected_target_xy = predicted_planet_position(target, travel_time, angular_velocity)
+
+    assert math.isclose(launch.target_xy[0], expected_target_xy[0], rel_tol=1e-4, abs_tol=1e-4)
+    assert math.isclose(launch.target_xy[1], expected_target_xy[1], rel_tol=1e-4, abs_tol=1e-4)
