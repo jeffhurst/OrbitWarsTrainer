@@ -46,6 +46,7 @@ def get_fleet_speed(num_ships: int) -> float:
 
     return float(min(max(speed, min_speed), max_speed))
 
+
 SEND_FRACTIONS = (0.0, 0.05, 0.15, 0.30, 0.50, 1.00)
 
 def decode_model_outputs(
@@ -92,12 +93,11 @@ def decode_model_outputs(
         if ships <= 0:
             continue
         target = candidates[idx]
-        fleet_speed = get_fleet_speed(ships)
         launch = None
         if precomputed_launches is not None and idx < len(precomputed_launches):
             launch = precomputed_launches[idx]
         if launch is None:
-            launch = predict_launch(source, target, angular_velocity, fleet_speed)
+            launch = predict_launch(source, target, angular_velocity, get_fleet_speed(ships))
         if trajectory_crosses_sun(launch.source_xy, launch.target_xy, sun_radius=sun_radius):
             LOGGER.debug("source=%s target=%s skipped sun-crossing launch", source.id, target.id)
             continue
