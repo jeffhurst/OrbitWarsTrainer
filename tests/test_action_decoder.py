@@ -120,3 +120,33 @@ def test_legacy_nine_output_vector_remains_supported():
     )
     assert len(actions) == 1
     assert actions[0].num_ships == 5
+
+
+def test_precomputed_launches_do_not_bypass_dynamic_fleet_speed(monkeypatch):
+    from orbit_wars_rl.core import actions as actions_mod
+
+    src = planet(0, 0, 0, ships=100)
+    target = planet(1, 20, 10)
+    precomputed = actions_mod.predict_launch(src, target, angular_velocity=0.05, fleet_speed=1.0)
+    outputs = [0.51, 1.0, 0, 0, 0, 0, 0, 0]
+    seen_speeds = []
+
+    original_predict = actions_mod.predict_launch
+
+    def recording_predict(source, target, angular_velocity, fleet_speed, center=(50.0, 50.0)):
+        seen_speeds.append(fleet_speed)
+        return original_predict(source, target, angular_velocity, fleet_speed, center)
+
+    monkeypatch.setattr(actions_mod, "predict_launch", recording_predict)
+
+    actions = decode_model_outputs(
+        src,
+        [target],
+        outputs,
+        ActionDecodeConfig(reserve_ships=1),
+        angular_velocity=0.05,
+        precomputed_launches=[precomputed],
+    )
+
+    assert len(actions) == 1
+    assert seen_speeds == [actions_mod.get_fleet_speed(99)]
