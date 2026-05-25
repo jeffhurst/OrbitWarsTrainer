@@ -36,8 +36,11 @@ def test_orbiting_source_uses_quadrant_static_selection():
     static_same_quadrant = planet(1, -1, 99, 99, ships=4, prod=2, radius=1)  # Q4 static
     static_near_other_quadrant = planet(2, -1, 99, 49, ships=1, prod=9, radius=10)  # static but Q1
     orbit_ccw = planet(3, -1, 60, 40, ships=3, prod=1, radius=1)  # orbiting Q1 (ccw of Q4)
-    selected = select_candidates(source, [source, static_same_quadrant, static_near_other_quadrant, orbit_ccw], 0, set()).candidates
-    assert [p.id for p in selected] == [3, 1]
+    orbit_same_quadrant = planet(4, -1, 90, 90, ships=2, prod=1, radius=1)  # orbiting Q4
+    selected = select_candidates(
+        source, [source, static_same_quadrant, static_near_other_quadrant, orbit_ccw, orbit_same_quadrant], 0, set()
+    ).candidates
+    assert [p.id for p in selected] == [4, 3, 1]
 
 
 def test_distance_tiebreak_with_same_owner_priority():

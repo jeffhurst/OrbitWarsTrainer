@@ -88,8 +88,10 @@ def select_candidates(
             elif distance(source, p) <= cfg.static_radius:
                 static.append(p)
                 seen.add(p.id)
-        elif orbiting_p and quadrant_of(p.x, p.y, cfg.quadrant_config) == wanted_q:
-            orbiting.append(p)
+        elif orbiting_p:
+            orbit_q = quadrant_of(p.x, p.y, cfg.quadrant_config)
+            if orbit_q == wanted_q or (source_orbiting and orbit_q == src_q):
+                orbiting.append(p)
             seen.add(p.id)
 
     combined = static + orbiting
