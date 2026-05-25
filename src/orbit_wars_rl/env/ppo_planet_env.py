@@ -327,6 +327,22 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         self.previous_total_production = total_production(parse_planets(self.obs), self.candidate_player)
         return self._current_obs(), {"source_id": self._current_source_id(), "no_source": not self.sources, "map_seed": map_seed}
 
+    def _can_source_send(self, source: Planet, candidates: list[Planet]) -> bool:
+        remaining = max(0, int(source.ships) - max(0, self.action_config.reserve_ships))
+        return remaining > 0 and bool(candidates)
+
+    def action_masks(self) -> tuple[list[bool], list[bool]]:
+        """Mask invalid per-dimension MultiDiscrete choices for the current source."""
+        if not self.sources:
+            return [True, False, False, False, False], [True] * 101
+        source = self.sources[min(self.current_source_index, len(self.sources) - 1)]
+        _obs, filtered_candidates, _launches = self._current_obs_and_candidates(source)
+        can_send = self._can_source_send(source, filtered_candidates)
+        max_target = min(4, len(filtered_candidates))
+        target_mask = [True] + [can_send and (i <= max_target) for i in range(1, 5)]
+        amount_mask = [True] * 101
+        return target_mask, amount_mask
+
     def step(self, action):
         if self.env is None:
             raise RuntimeError("reset() must be called before step().")
@@ -361,7 +377,8 @@ class OrbitWarsPlanetStepEnv(gym.Env):
             elif target.owner == self.candidate_player:
                 self.episode_self_target_count += 1
         chose_send = target_choice > 0
-        if chose_send and not decoded_rows:
+        can_send = self._can_source_send(source, filtered_candidates)
+        if chose_send and can_send and not decoded_rows:
             self.episode_invalid_action_count += 1
         tactical_reward = self._source_tactical_reward(source, filtered_candidates, decoded_rows, action_values)
         send_reward = ships_sent_reward(decoded_rows, self.reward_config) + tactical_reward
