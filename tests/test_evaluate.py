@@ -6,7 +6,12 @@ from orbit_wars_rl.evaluation import evaluate
 
 
 class ConstantPolicy:
-    def predict(self, obs):
+    def __init__(self):
+        self.deterministic_values = []
+
+    def predict(self, obs, deterministic=False):
+        del obs
+        self.deterministic_values.append(deterministic)
         return [0.0] * 9
 
 
@@ -60,7 +65,8 @@ def test_evaluation_metrics_use_shaped_reward_and_ship_score_win_rate(
     ScriptedPlanetStepEnv.instances = []
     monkeypatch.setattr(evaluate, "OrbitWarsPlanetStepEnv", ScriptedPlanetStepEnv)
 
-    path = runner(ConstantPolicy(), 1, tmp_path)
+    policy = ConstantPolicy()
+    path = runner(policy, 1, tmp_path)
 
     metrics = json.loads(path.read_text())
     assert metrics["backend"] == expected_backend
@@ -70,6 +76,7 @@ def test_evaluation_metrics_use_shaped_reward_and_ship_score_win_rate(
     assert metrics["final_average_candidate_score"] > metrics["final_average_opponent_score"]
     assert metrics["win_rate"] == pytest.approx(1.0)
     assert ScriptedPlanetStepEnv.instances[0].require_kaggle is expected_require_kaggle
+    assert policy.deterministic_values == [True]
 
 
 class ScriptedMapSeedEnv:

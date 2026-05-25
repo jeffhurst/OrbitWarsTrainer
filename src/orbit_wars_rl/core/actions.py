@@ -61,6 +61,30 @@ def decode_model_outputs(
     precomputed_launches: Sequence[LaunchSolution | None] | None = None,
 ) -> list[Action]:
     cfg = config or ActionDecodeConfig()
+    # New mode: [target_choice, amount_norm]
+    if len(outputs) == 2:
+        if not candidates:
+            return []
+        remaining = max(0, int(source.ships) - max(0, cfg.reserve_ships))
+        if remaining <= 0:
+            return []
+        target_choice = int(outputs[0])
+        if target_choice <= 0:
+            return []
+        idx = target_choice - 1
+        if idx < 0 or idx >= min(4, len(candidates)):
+            return []
+        target = candidates[idx]
+        min_send = min(10, remaining)
+        amount_norm = clamp01(float(outputs[1]) / 100.0 if float(outputs[1]) > 1.0 else float(outputs[1]))
+        span = max(0, remaining - min_send)
+        ships = int(min_send + math.floor(amount_norm * span))
+        ships = min(max(min_send, ships), remaining)
+        launch = predict_launch(source, target, angular_velocity, get_fleet_speed(ships))
+        if trajectory_crosses_sun(launch.source_xy, launch.target_xy, sun_radius=sun_radius):
+            return []
+        return [Action(source.id, launch.angle, ships)]
+
     output_len = len(outputs)
     if output_len == 9:
         output_len = 8

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import math
 import random
 from typing import Any
 
@@ -37,6 +38,10 @@ except Exception:  # pragma: no cover - exercised only in minimal installations.
     class _Spaces:
         Box = _Box
         MultiDiscrete = _MultiDiscrete
+        class Discrete:
+            def __init__(self, n: int):
+                self.n = int(n)
+                self.shape = ()
 
     class _Env:
         pass
@@ -217,7 +222,9 @@ class OrbitWarsPlanetStepEnv(gym.Env):
 
     metadata = {"render_modes": []}
     observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(15,), dtype=np.float32)
-    action_space = spaces.MultiDiscrete([6, 6, 6, 6])
+    # action[0]: target selection (0=pass, 1..4=candidate index)
+    # action[1]: normalized amount bucket in [0, 100]
+    action_space = spaces.MultiDiscrete([5, 101])
 
     def __init__(
         self,
@@ -270,6 +277,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         self.episode_enemy_captures = 0
         self.episode_neutral_captures = 0
         self.episode_return_scaled = 0.0
+        self.episode_return_log_scale = 0.1
         self.current_map_seed: int | None = None
 
     def reset(self, *, seed: int | None = None, options: dict | None = None):
@@ -342,18 +350,18 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         self.episode_action_count += 1
         self.episode_ships_sent_total += float(sum(float(row[2]) for row in decoded_rows if len(row) >= 3))
         action_values = np.asarray(action, dtype=np.float32).reshape(-1).tolist()
-        for idx, value in enumerate(action_values[: min(len(filtered_candidates), 4)]):
-            if int(value) <= 0:
-                continue
+        target_choice = int(action_values[0]) if action_values else 0
+        if 1 <= target_choice <= min(len(filtered_candidates), 4):
             self.episode_target_choice_count += 1
-            target = filtered_candidates[idx]
+            target = filtered_candidates[target_choice - 1]
             if target.owner == (1 - self.candidate_player):
                 self.episode_enemy_target_count += 1
             elif target.owner < 0:
                 self.episode_neutral_target_count += 1
             elif target.owner == self.candidate_player:
                 self.episode_self_target_count += 1
-        if any(int(v) > 0 for v in action_values[: min(len(filtered_candidates), 4)]) and not decoded_rows:
+        chose_send = target_choice > 0
+        if chose_send and not decoded_rows:
             self.episode_invalid_action_count += 1
         tactical_reward = self._source_tactical_reward(source, filtered_candidates, decoded_rows, action_values)
         send_reward = ships_sent_reward(decoded_rows, self.reward_config) + tactical_reward
@@ -478,7 +486,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
                 self._seed_cycle.insert(0, self.current_map_seed)
             reward = float(reward + terminal_reward)
         scaled_reward = float(reward * self.reward_config.reward_scale)
-        self.episode_return_scaled += scaled_reward
+        self.episode_return_scaled += scaled_reward * self.episode_return_log_scale
         self.episode_turn_count = self.turn_index
         win_rate = 1.0 if terminated and not truncated and terminal_reward > 0 else 0.0
         loss_rate = 1.0 if terminated and not truncated and terminal_reward < 0 else 0.0
@@ -544,6 +552,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
                     "game/enemy_captures_this_turn": float(enemy_captured),
                     "action/invalid_rate": float(self.episode_invalid_action_count / max(1, self.episode_action_count)),
                     "action/ships_sent_mean": float(self.episode_ships_sent_total / max(1, self.episode_action_count)),
+                    "game/pool_size": float(len(self._seed_cycle)),
                 } if (terminated or truncated) else None,
             },
         )
@@ -576,6 +585,32 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         output_len = 8 if len(action_values) == 9 else len(action_values)
         sun_radius = sun_collision_radius_from_obs(self.obs)
         angular_velocity = float(self.obs.get("angular_velocity", 0.0))
+        if output_len == 2:
+            target_choice = int(action_values[0]) if action_values else 0
+            if target_choice <= 0:
+                return local_reward
+            idx = target_choice - 1
+            if idx < 0 or idx >= min(4, len(candidates)):
+                return local_reward
+            amount_value = float(action_values[1]) if len(action_values) > 1 else 0.0
+            pct = max(0.0, min(1.0, amount_value / 100.0 if amount_value > 1.0 else amount_value))
+            min_send = min(10, remaining)
+            span = max(0, remaining - min_send)
+            ships = int(min_send + math.floor(pct * span))
+            ships = min(max(min_send, ships), remaining)
+            if ships <= 0:
+                return local_reward
+            target = candidates[idx]
+            launch = predict_launch(source, target, angular_velocity, get_fleet_speed(ships))
+            if trajectory_crosses_sun(launch.source_xy, launch.target_xy, sun_radius=sun_radius):
+                return local_reward
+            if target.owner != self.candidate_player and ships < int(target.ships):
+                target_ships = max(1, int(target.ships))
+                shortfall = target_ships - ships
+                normalizer = max(1, target_ships - 1)
+                local_reward -= 0.1 * (shortfall / normalizer)
+            return local_reward
+
         for idx in range(min(4, len(candidates))):
             if remaining <= 0:
                 break
@@ -583,6 +618,8 @@ class OrbitWarsPlanetStepEnv(gym.Env):
                 discrete = max(0, min(5, int(action_values[idx])))
                 requested = int(remaining * SEND_FRACTIONS[discrete])
             else:
+                if (idx * 2 + 1) >= len(action_values):
+                    break
                 active = float(action_values[idx * 2]) > self.action_config.activation_threshold
                 if not active:
                     continue

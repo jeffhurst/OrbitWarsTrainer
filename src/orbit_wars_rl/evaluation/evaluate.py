@@ -149,7 +149,7 @@ def _evaluate_planet_step(
         total_reward = 0.0
         length = 0
         while not done:
-            action = policy.predict(obs)
+            action = _predict_deterministic(policy, obs)
             obs, reward, terminated, truncated, info = env.step(action)
             total_reward += float(reward)
             if info.get("turn_advanced"):
