@@ -37,6 +37,10 @@ except Exception:  # pragma: no cover - exercised only in minimal installations.
     class _Spaces:
         Box = _Box
         MultiDiscrete = _MultiDiscrete
+        class Discrete:
+            def __init__(self, n: int):
+                self.n = int(n)
+                self.shape = ()
 
     class _Env:
         pass
@@ -217,7 +221,9 @@ class OrbitWarsPlanetStepEnv(gym.Env):
 
     metadata = {"render_modes": []}
     observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(15,), dtype=np.float32)
-    action_space = spaces.MultiDiscrete([6, 6, 6, 6])
+    # action[0]: target selection (0=pass, 1..4=candidate index)
+    # action[1]: normalized amount bucket in [0, 100]
+    action_space = spaces.MultiDiscrete([5, 101])
 
     def __init__(
         self,
@@ -342,18 +348,18 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         self.episode_action_count += 1
         self.episode_ships_sent_total += float(sum(float(row[2]) for row in decoded_rows if len(row) >= 3))
         action_values = np.asarray(action, dtype=np.float32).reshape(-1).tolist()
-        for idx, value in enumerate(action_values[: min(len(filtered_candidates), 4)]):
-            if int(value) <= 0:
-                continue
+        target_choice = int(action_values[0]) if action_values else 0
+        if 1 <= target_choice <= min(len(filtered_candidates), 4):
             self.episode_target_choice_count += 1
-            target = filtered_candidates[idx]
+            target = filtered_candidates[target_choice - 1]
             if target.owner == (1 - self.candidate_player):
                 self.episode_enemy_target_count += 1
             elif target.owner < 0:
                 self.episode_neutral_target_count += 1
             elif target.owner == self.candidate_player:
                 self.episode_self_target_count += 1
-        if any(int(v) > 0 for v in action_values[: min(len(filtered_candidates), 4)]) and not decoded_rows:
+        chose_send = target_choice > 0
+        if chose_send and not decoded_rows:
             self.episode_invalid_action_count += 1
         tactical_reward = self._source_tactical_reward(source, filtered_candidates, decoded_rows, action_values)
         send_reward = ships_sent_reward(decoded_rows, self.reward_config) + tactical_reward
@@ -544,6 +550,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
                     "game/enemy_captures_this_turn": float(enemy_captured),
                     "action/invalid_rate": float(self.episode_invalid_action_count / max(1, self.episode_action_count)),
                     "action/ships_sent_mean": float(self.episode_ships_sent_total / max(1, self.episode_action_count)),
+                    "game/pool_size": float(len(self._seed_cycle)),
                 } if (terminated or truncated) else None,
             },
         )
