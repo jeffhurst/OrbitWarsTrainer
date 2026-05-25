@@ -224,3 +224,31 @@ def test_source_tactical_reward_two_value_branch_uses_decoder_min_send_floor():
     reward = env._source_tactical_reward(source, [enemy], [[0, 0.0, 0]], [1, 0.0])
 
     assert reward == pytest.approx(0.0)
+
+def test_action_masks_prevent_send_when_no_remaining_ships():
+    env = OrbitWarsPlanetStepEnv(require_kaggle=False)
+    env.reset(seed=123)
+    from orbit_wars_rl.core.types import Planet
+    source = Planet(0, 0, 80, 80, 2.0, 1, 1.0)
+    candidate = Planet(2, 1, 83, 80, 2.0, 9, 1.0)
+    env.sources = [source]
+    env.current_source_index = 0
+    env._current_obs_and_candidates = lambda _source: (None, [candidate], [])
+
+    target_mask, amount_mask = env.action_masks()
+    assert target_mask == [True, False, False, False, False]
+    assert len(amount_mask) == 101
+
+
+def test_no_invalid_count_when_send_selected_but_source_cannot_send():
+    env = OrbitWarsPlanetStepEnv(require_kaggle=False)
+    env.reset(seed=123)
+    from orbit_wars_rl.core.types import Planet
+    source = Planet(0, 0, 80, 80, 2.0, 1, 1.0)
+    candidate = Planet(2, 1, 83, 80, 2.0, 9, 1.0)
+    env.sources = [source]
+    env.current_source_index = 0
+    env._current_obs_and_candidates = lambda _source: (None, [candidate], [])
+
+    _obs, _reward, _terminated, _truncated, _info = env.step([1, 100])
+    assert env.episode_invalid_action_count == 0

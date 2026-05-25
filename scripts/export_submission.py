@@ -108,7 +108,8 @@ def _decode(src, chosen, outputs, angular_velocity, fleet_speed, sun_radius):
     remaining=max(0, int(src[5])-1); actions=[]
     for idx in range(min(4, len(chosen))):
         if float(outputs[idx*2]) <= 0.5 or remaining <= 0: continue
-        ships=min(max(1, int(math.floor(float(src[5]) * _clip01(outputs[idx*2+1])))), remaining)
+        min_send=min(10, remaining)
+        ships=min(max(min_send, int(math.floor(float(src[5]) * _clip01(outputs[idx*2+1])))), remaining)
         if ships <= 0: continue
         target=chosen[idx]; tx,ty=_intercept_xy(src, target, angular_velocity, fleet_speed)
         if _crosses_sun(src, (tx,ty), sun_radius): continue
