@@ -6,3 +6,7 @@ __pycache__/
 venv/
 runs/
 submission.py
+.egg-info
+..gitignore.un~
+.gitignore~
+src/orbit_wars_rl.egg-info/
