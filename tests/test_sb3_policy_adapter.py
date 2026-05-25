@@ -32,3 +32,15 @@ def test_sb3_policy_adapter_accepts_multidiscrete_actions():
 def test_sb3_policy_adapter_rejects_wrong_obs_shape():
     with pytest.raises(ValueError):
         SB3PolicyAdapter(FakeModel()).predict([0.0] * 14)
+
+
+class FakeTwoHeadModel:
+    def predict(self, obs, deterministic=True):
+        assert deterministic is True
+        assert obs.shape == (15,)
+        return np.array([2, 77], dtype=np.int64), None
+
+
+def test_sb3_policy_adapter_accepts_two_head_actions():
+    action = SB3PolicyAdapter(FakeTwoHeadModel()).predict([0.0] * 15)
+    assert action == [2.0, 77.0]

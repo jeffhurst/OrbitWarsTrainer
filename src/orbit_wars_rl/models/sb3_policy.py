@@ -25,8 +25,10 @@ class SB3PolicyAdapter:
             raise ValueError(f"expected observation shape (15,), got {obs_array.shape}")
         action, _state = self.model.predict(obs_array, deterministic=True)
         action_array = np.asarray(action, dtype=np.float32).reshape(-1)
-        if action_array.shape == (4,):
+        if action_array.shape in ((2,), (4,)):
             return action_array.astype(float).tolist()
-        if action_array.shape == (9,):
+        if action_array.shape in ((8,), (9,)):
             return np.clip(action_array, 0.0, 1.0).astype(float).tolist()
-        raise ValueError(f"expected action shape (4,) or (9,), got {action_array.shape}")
+        raise ValueError(
+            f"expected action shape (2,), (4,), (8,), or (9,), got {action_array.shape}"
+        )

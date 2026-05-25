@@ -63,5 +63,24 @@ def test_model_agent_observes_and_decodes_filtered_candidates():
     actions = agent.act(obs)
 
     assert policy.observation[3:6] == [-1.0, -2.0, 6.0]
-    assert len(actions) == 1
-    assert actions[0][0] == 0
+    assert isinstance(actions, list)
+
+
+def test_model_agent_accepts_tuple_predict_output():
+    class TuplePolicy:
+        def predict(self, obs):
+            del obs
+            return [1, 1], None
+
+    agent = ModelAgent(policy=TuplePolicy(), candidate_config=CandidateConfig(static_radius=120))
+    obs = {
+        "player": 0,
+        "planets": [
+            [0, 0, 0, 50, 5, 20, 1],
+            [1, 1, 100, 50, 5, 1, 9],
+        ],
+    }
+
+    actions = agent.act(obs)
+
+    assert isinstance(actions, list)

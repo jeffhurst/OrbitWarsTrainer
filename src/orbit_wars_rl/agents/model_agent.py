@@ -20,6 +20,15 @@ class Policy(Protocol):
     def predict(self, obs): ...
 
 
+def _normalize_policy_outputs(raw: Any) -> list[float]:
+    if isinstance(raw, tuple):
+        raw = raw[0]
+    if hasattr(raw, "tolist"):
+        raw = raw.tolist()
+    if not isinstance(raw, (list, tuple)):
+        raise TypeError(f"policy.predict returned unsupported action type: {type(raw)!r}")
+    return [float(v) for v in raw]
+
 @dataclass(slots=True)
 class ModelAgent:
     policy: Policy = field(default_factory=lambda: NumpyPolicy.random(0))
@@ -53,7 +62,7 @@ class ModelAgent:
                 fleet_speed=fleet_speed,
                 sun_radius=sun_radius,
             )
-            outputs = self.policy.predict(model_obs)
+            outputs = _normalize_policy_outputs(self.policy.predict(model_obs))
             actions.extend(
                 decode_model_outputs(
                     source,
