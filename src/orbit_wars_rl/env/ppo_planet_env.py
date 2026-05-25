@@ -583,6 +583,31 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         output_len = 8 if len(action_values) == 9 else len(action_values)
         sun_radius = sun_collision_radius_from_obs(self.obs)
         angular_velocity = float(self.obs.get("angular_velocity", 0.0))
+        if output_len == 2:
+            target_choice = int(action_values[0]) if action_values else 0
+            if target_choice <= 0:
+                return local_reward
+            idx = target_choice - 1
+            if idx < 0 or idx >= min(4, len(candidates)):
+                return local_reward
+            amount_value = float(action_values[1]) if len(action_values) > 1 else 0.0
+            pct = max(0.0, min(1.0, amount_value / 100.0 if amount_value > 1.0 else amount_value))
+            requested = int(source.ships * pct)
+            requested = max(1, requested)
+            ships = min(max(0, requested), remaining)
+            if ships <= 0:
+                return local_reward
+            target = candidates[idx]
+            launch = predict_launch(source, target, angular_velocity, get_fleet_speed(ships))
+            if trajectory_crosses_sun(launch.source_xy, launch.target_xy, sun_radius=sun_radius):
+                return local_reward
+            if target.owner != self.candidate_player and ships < int(target.ships):
+                target_ships = max(1, int(target.ships))
+                shortfall = target_ships - ships
+                normalizer = max(1, target_ships - 1)
+                local_reward -= 0.1 * (shortfall / normalizer)
+            return local_reward
+
         for idx in range(min(4, len(candidates))):
             if remaining <= 0:
                 break
@@ -590,6 +615,8 @@ class OrbitWarsPlanetStepEnv(gym.Env):
                 discrete = max(0, min(5, int(action_values[idx])))
                 requested = int(remaining * SEND_FRACTIONS[discrete])
             else:
+                if (idx * 2 + 1) >= len(action_values):
+                    break
                 active = float(action_values[idx * 2]) > self.action_config.activation_threshold
                 if not active:
                     continue
