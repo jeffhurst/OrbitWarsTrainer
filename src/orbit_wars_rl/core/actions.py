@@ -47,7 +47,7 @@ def get_fleet_speed(num_ships: int) -> float:
     return float(min(max(speed, min_speed), max_speed))
 
 
-SEND_FRACTIONS = (0.0, 0.05, 0.15, 0.30, 0.50, 1.00)
+SEND_FRACTIONS = (0.0, 0.2, 0.4, 0.6, 0.8, 1.0)
 
 def decode_model_outputs(
     source: Planet,

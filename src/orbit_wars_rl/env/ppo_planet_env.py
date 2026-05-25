@@ -54,9 +54,11 @@ from orbit_wars_rl.agents.starter_agent import StarterAgent
 from orbit_wars_rl.core.actions import (
     ActionDecodeConfig,
     decode_model_outputs,
+    get_fleet_speed,
+    SEND_FRACTIONS,
 )
 from orbit_wars_rl.core.candidates import CandidateConfig, comet_ids_from_obs
-from orbit_wars_rl.core.geometry import sun_collision_radius_from_obs
+from orbit_wars_rl.core.geometry import predict_launch, sun_collision_radius_from_obs, trajectory_crosses_sun
 from orbit_wars_rl.core.observations import ObservationBuilder
 from orbit_wars_rl.core.planets import total_production
 from orbit_wars_rl.core.types import Planet, parse_planets, rows
@@ -353,7 +355,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
                 self.episode_self_target_count += 1
         if any(int(v) > 0 for v in action_values[: min(len(filtered_candidates), 4)]) and not decoded_rows:
             self.episode_invalid_action_count += 1
-        tactical_reward = self._source_tactical_reward(source, filtered_candidates, decoded_rows)
+        tactical_reward = self._source_tactical_reward(source, filtered_candidates, decoded_rows, action_values)
         send_reward = ships_sent_reward(decoded_rows, self.reward_config) + tactical_reward
         self.buffered_actions.extend(decoded_rows)
         self.current_source_index += 1
@@ -564,31 +566,43 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         self.sources = [p for p in planets if p.owner == self.candidate_player and p.id not in comet_ids]
         self.current_source_index = 0
 
-    def _source_tactical_reward(self, source: Planet, candidates: list[Planet], decoded_rows: list[list[float]]) -> float:
-        non_friendly = [p for p in candidates if p.owner != self.candidate_player]
-        if not non_friendly:
-            return 0.0
-        source_ships = int(source.ships)
-        any_attackable = any(int(p.ships) < source_ships for p in non_friendly)
-        all_too_strong = all(int(p.ships) > source_ships for p in non_friendly)
-        captured = False
-        for row in decoded_rows:
-            if len(row) < 3:
-                continue
-            sent_ships = int(row[2])
-            for target in non_friendly:
-                if sent_ships > int(target.ships):
-                    captured = True
-                    break
-            if captured:
+    def _source_tactical_reward(
+        self, source: Planet, candidates: list[Planet], decoded_rows: list[list[float]], action_values: list[float]
+    ) -> float:
+        if not decoded_rows:
+            return 0.01
+        local_reward = 0.0
+        remaining = max(0, int(source.ships) - max(0, self.action_config.reserve_ships))
+        output_len = 8 if len(action_values) == 9 else len(action_values)
+        sun_radius = sun_collision_radius_from_obs(self.obs)
+        angular_velocity = float(self.obs.get("angular_velocity", 0.0))
+        for idx in range(min(4, len(candidates))):
+            if remaining <= 0:
                 break
-        if captured:
-            return 0.5
-        if not decoded_rows and all_too_strong:
-            return 0.25
-        if not decoded_rows and any_attackable:
-            return -0.5
-        return 0.0
+            if output_len == 4:
+                discrete = max(0, min(5, int(action_values[idx])))
+                requested = int(remaining * SEND_FRACTIONS[discrete])
+            else:
+                active = float(action_values[idx * 2]) > self.action_config.activation_threshold
+                if not active:
+                    continue
+                pct = max(0.0, min(1.0, float(action_values[idx * 2 + 1])))
+                requested = int(source.ships * pct)
+                requested = max(1, requested)
+            ships = min(max(0, requested), remaining)
+            if ships <= 0:
+                continue
+            target = candidates[idx]
+            launch = predict_launch(source, target, angular_velocity, get_fleet_speed(ships))
+            if trajectory_crosses_sun(launch.source_xy, launch.target_xy, sun_radius=sun_radius):
+                continue
+            remaining -= ships
+            if target.owner != self.candidate_player and ships < int(target.ships):
+                target_ships = max(1, int(target.ships))
+                shortfall = target_ships - ships
+                normalizer = max(1, target_ships - 1)
+                local_reward -= 0.1 * (shortfall / normalizer)
+        return local_reward
 
     def _current_source_id(self) -> int | None:
         if not self.sources:
