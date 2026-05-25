@@ -198,9 +198,29 @@ def test_source_tactical_reward_rewards_saving_and_penalizes_missed_attacks():
 
     env = OrbitWarsPlanetStepEnv(require_kaggle=False)
     source = Planet(0, 0, 80, 80, 2.0, 10, 1.0)
-    strong_enemy = Planet(1, 1, 82, 80, 2.0, 11, 1.0)
     weak_enemy = Planet(2, 1, 83, 80, 2.0, 9, 1.0)
 
-    assert env._source_tactical_reward(source, [strong_enemy], []) > 0.0
-    assert env._source_tactical_reward(source, [weak_enemy], []) < 0.0
-    assert env._source_tactical_reward(source, [weak_enemy], [[0, 0.0, 10]]) > 0.0
+    assert env._source_tactical_reward(source, [weak_enemy], [], []) > 0.0
+
+    under_send_reward = env._source_tactical_reward(
+        source,
+        [weak_enemy],
+        [[0, 0.0, 1]],
+        [1.0, 0.1] + [0.0] * 6,
+    )
+    assert under_send_reward < 0.0
+
+    no_attack_reward = env._source_tactical_reward(source, [weak_enemy], [[0, 0.0, 10]], [0.0] * 8)
+    assert no_attack_reward == pytest.approx(0.0)
+
+
+def test_source_tactical_reward_two_value_branch_uses_decoder_min_send_floor():
+    from orbit_wars_rl.core.types import Planet
+
+    env = OrbitWarsPlanetStepEnv(require_kaggle=False)
+    source = Planet(0, 0, 80, 80, 2.0, 20, 1.0)
+    enemy = Planet(1, 1, 82, 80, 2.0, 8, 1.0)
+
+    reward = env._source_tactical_reward(source, [enemy], [[0, 0.0, 0]], [1, 0.0])
+
+    assert reward == pytest.approx(0.0)
