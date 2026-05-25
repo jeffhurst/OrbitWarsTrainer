@@ -67,7 +67,7 @@ def train_ppo(config: PPOTrainConfig) -> Path:
         seed=config.seed,
         verbose=config.verbose,
         device="cpu",
-        target_kl=0.03,
+        target_kl=config.target_kl,
     )
     callbacks = [EpisodeComponentLogger()]
     if config.deterministic_eval:
