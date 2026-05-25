@@ -47,6 +47,7 @@ class EpisodeComponentLogger(BaseCallback):
                 "game/avg_enemy_captures",
                 "game/avg_neutral_captures",
                 "game/map_seed",
+                "game/pool_size",
                 "action/invalid_rate",
                 "action/ships_sent_mean",
             ]
