@@ -252,3 +252,27 @@ def test_no_invalid_count_when_send_selected_but_source_cannot_send():
 
     _obs, _reward, _terminated, _truncated, _info = env.step([1, 100])
     assert env.episode_invalid_action_count == 0
+
+
+def test_rebuild_sources_skips_low_ship_sources():
+    env = OrbitWarsPlanetStepEnv(require_kaggle=False)
+    env.reset(seed=123)
+    from orbit_wars_rl.core.types import Planet
+
+    eligible = Planet(10, 0, 50, 50, 2.0, 10, 1.0)
+    ineligible = Planet(11, 0, 52, 50, 2.0, 9, 1.0)
+    enemy = Planet(12, 1, 54, 50, 2.0, 20, 1.0)
+    env.obs = {
+        "player": 0,
+        "step": 0,
+        "planets": [
+            [eligible.id, eligible.owner, eligible.x, eligible.y, eligible.production, eligible.ships, eligible.radius],
+            [ineligible.id, ineligible.owner, ineligible.x, ineligible.y, ineligible.production, ineligible.ships, ineligible.radius],
+            [enemy.id, enemy.owner, enemy.x, enemy.y, enemy.production, enemy.ships, enemy.radius],
+        ],
+        "comets": [],
+    }
+
+    env._rebuild_sources()
+
+    assert [p.id for p in env.sources] == [eligible.id]
