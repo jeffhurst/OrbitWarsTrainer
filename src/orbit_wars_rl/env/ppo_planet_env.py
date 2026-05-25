@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import math
 import random
 from typing import Any
 
@@ -592,9 +593,10 @@ class OrbitWarsPlanetStepEnv(gym.Env):
                 return local_reward
             amount_value = float(action_values[1]) if len(action_values) > 1 else 0.0
             pct = max(0.0, min(1.0, amount_value / 100.0 if amount_value > 1.0 else amount_value))
-            requested = int(source.ships * pct)
-            requested = max(1, requested)
-            ships = min(max(0, requested), remaining)
+            min_send = min(10, remaining)
+            span = max(0, remaining - min_send)
+            ships = int(min_send + math.floor(pct * span))
+            ships = min(max(min_send, ships), remaining)
             if ships <= 0:
                 return local_reward
             target = candidates[idx]
