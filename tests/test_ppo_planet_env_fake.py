@@ -259,7 +259,7 @@ def test_rebuild_sources_skips_low_ship_sources():
     env.reset(seed=123)
     from orbit_wars_rl.core.types import Planet
 
-    eligible = Planet(10, 0, 50, 50, 2.0, 10, 1.0)
+    eligible = Planet(10, 0, 50, 50, 2.0, 11, 1.0)
     ineligible = Planet(11, 0, 52, 50, 2.0, 9, 1.0)
     enemy = Planet(12, 1, 54, 50, 2.0, 20, 1.0)
     env.obs = {

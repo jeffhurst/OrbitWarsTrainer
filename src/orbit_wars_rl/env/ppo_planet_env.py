@@ -225,7 +225,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
     # action[0]: target selection (0=pass, 1..4=candidate index)
     # action[1]: normalized amount bucket in [0, 100]
     action_space = spaces.MultiDiscrete([5, 101])
-    min_source_ships_to_act = 10
+    min_source_ships_to_act = 11
 
     def __init__(
         self,
