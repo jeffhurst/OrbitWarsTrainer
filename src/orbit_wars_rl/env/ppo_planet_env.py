@@ -277,6 +277,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         self.episode_enemy_captures = 0
         self.episode_neutral_captures = 0
         self.episode_return_scaled = 0.0
+        self.episode_return_log_scale = 0.1
         self.current_map_seed: int | None = None
 
     def reset(self, *, seed: int | None = None, options: dict | None = None):
@@ -485,7 +486,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
                 self._seed_cycle.insert(0, self.current_map_seed)
             reward = float(reward + terminal_reward)
         scaled_reward = float(reward * self.reward_config.reward_scale)
-        self.episode_return_scaled += scaled_reward
+        self.episode_return_scaled += scaled_reward * self.episode_return_log_scale
         self.episode_turn_count = self.turn_index
         win_rate = 1.0 if terminated and not truncated and terminal_reward > 0 else 0.0
         loss_rate = 1.0 if terminated and not truncated and terminal_reward < 0 else 0.0
