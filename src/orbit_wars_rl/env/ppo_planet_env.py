@@ -225,6 +225,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
     # action[0]: target selection (0=pass, 1..4=candidate index)
     # action[1]: normalized amount bucket in [0, 100]
     action_space = spaces.MultiDiscrete([5, 101])
+    min_source_ships_to_act = 11
 
     def __init__(
         self,
@@ -589,7 +590,13 @@ class OrbitWarsPlanetStepEnv(gym.Env):
     def _rebuild_sources(self) -> None:
         planets = parse_planets(self.obs)
         comet_ids = comet_ids_from_obs(self.obs)
-        self.sources = [p for p in planets if p.owner == self.candidate_player and p.id not in comet_ids]
+        self.sources = [
+            p
+            for p in planets
+            if p.owner == self.candidate_player
+            and p.id not in comet_ids
+            and int(p.ships) >= self.min_source_ships_to_act
+        ]
         self.current_source_index = 0
 
     def _source_tactical_reward(
