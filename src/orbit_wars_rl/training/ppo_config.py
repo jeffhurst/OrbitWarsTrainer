@@ -15,10 +15,10 @@ class PPOTrainConfig:
     n_envs: int = 1
 
     # PPO hyperparameters for per-planet-action Orbit Wars env.
-    learning_rate: float = 7.5e-5
-    n_steps: int = 18432
+    learning_rate: float = 1.5e-4
+    n_steps: int = 8192
     batch_size: int = 512
-    n_epochs: int = 8
+    n_epochs: int = 10
     gamma: float = 0.999
     gae_lambda: float = 0.97
     clip_range: float = 0.14
@@ -34,7 +34,7 @@ class PPOTrainConfig:
     opponent: str = "starter"
     opponent_model: str | Path | None = None
     candidate_player: int = 0
-    max_episode_turns: int = 500
+    max_episode_turns: int = 501
     require_kaggle: bool = True
 
     # Logging.
