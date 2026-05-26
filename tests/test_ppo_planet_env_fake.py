@@ -180,6 +180,19 @@ def test_reset_uses_new_random_map_seed_for_each_game(monkeypatch):
     assert calls[1]["configuration"]["seed"] in ppo_planet_env.MAP_SEEDS
 
 
+def test_reset_rebuilds_seed_pool_when_below_threshold():
+    from orbit_wars_rl.env import ppo_planet_env
+
+    env = OrbitWarsPlanetStepEnv(require_kaggle=False, seed=7)
+    env._seed_cycle = [101, 102, 103, 104]
+
+    env.reset()
+
+    assert env.current_map_seed in ppo_planet_env.MAP_SEEDS
+    assert len(env._seed_cycle) == len(ppo_planet_env.MAP_SEEDS) - 1
+    assert set(env._seed_cycle).issubset(set(ppo_planet_env.MAP_SEEDS))
+
+
 def test_episode_components_have_no_pressure_or_waste_and_reward_totals_match():
     env = OrbitWarsPlanetStepEnv(require_kaggle=False, max_episode_turns=1)
     _obs, reset_info = env.reset(seed=123)
