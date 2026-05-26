@@ -13,7 +13,7 @@ class RecordingPolicy:
 
 def test_model_agent_reuses_same_production_delta_for_all_sources_in_turn():
     policy = RecordingPolicy()
-    agent = ModelAgent(policy=policy)
+    agent = ModelAgent(policy=policy, min_source_ships_to_act=1)
     first_obs = {
         "player": 0,
         "planets": [
@@ -50,7 +50,9 @@ def test_model_agent_observes_and_decodes_filtered_candidates():
             return [5, 0, 0, 0]
 
     policy = AttackFirstPolicy()
-    agent = ModelAgent(policy=policy, candidate_config=CandidateConfig(static_radius=120))
+    agent = ModelAgent(
+        policy=policy, candidate_config=CandidateConfig(static_radius=120), min_source_ships_to_act=1
+    )
     obs = {
         "player": 0,
         "planets": [
@@ -84,3 +86,57 @@ def test_model_agent_accepts_tuple_predict_output():
     actions = agent.act(obs)
 
     assert isinstance(actions, list)
+
+
+def test_model_agent_skips_policy_for_sources_below_minimum_ships():
+    class CountingPolicy:
+        def __init__(self):
+            self.calls = 0
+            self.b2 = [0.0, 0.0]
+
+        def predict(self, obs):
+            del obs
+            self.calls += 1
+            return [1, 0.5]
+
+    policy = CountingPolicy()
+    agent = ModelAgent(policy=policy, candidate_config=CandidateConfig(static_radius=120))
+    obs = {
+        "player": 0,
+        "planets": [
+            [0, 0, 0, 50, 5, 10, 1],   # below threshold, should be skipped
+            [1, 0, 20, 50, 5, 11, 1],  # at threshold, should be evaluated
+            [2, 1, 100, 50, 5, 1, 9],
+        ],
+    }
+
+    actions = agent.act(obs)
+
+    assert policy.calls == 1
+    assert all(action[0] != 0 for action in actions)
+
+
+def test_model_agent_does_not_apply_threshold_for_legacy_output_shapes():
+    class CountingLegacyPolicy:
+        def __init__(self):
+            self.calls = 0
+
+        def predict(self, obs):
+            del obs
+            self.calls += 1
+            return [5, 0, 0, 0]
+
+    policy = CountingLegacyPolicy()
+    agent = ModelAgent(policy=policy, candidate_config=CandidateConfig(static_radius=120))
+    obs = {
+        "player": 0,
+        "planets": [
+            [0, 0, 0, 50, 5, 10, 1],   # below threshold but should still be evaluated for legacy shapes
+            [1, 0, 20, 50, 5, 11, 1],
+            [2, 1, 100, 50, 5, 1, 9],
+        ],
+    }
+
+    agent.act(obs)
+
+    assert policy.calls == 2

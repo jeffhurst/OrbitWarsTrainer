@@ -29,6 +29,20 @@ def _normalize_policy_outputs(raw: Any) -> list[float]:
         raise TypeError(f"policy.predict returned unsupported action type: {type(raw)!r}")
     return [float(v) for v in raw]
 
+
+def _infer_policy_output_size(policy: Policy) -> int | None:
+    if hasattr(policy, "b2"):
+        b2 = getattr(policy, "b2")
+        if isinstance(b2, list):
+            return len(b2)
+    if hasattr(policy, "model"):
+        model = getattr(policy, "model")
+        action_space = getattr(model, "action_space", None)
+        shape = getattr(action_space, "shape", None)
+        if isinstance(shape, tuple) and len(shape) == 1:
+            return int(shape[0])
+    return None
+
 @dataclass(slots=True)
 class ModelAgent:
     policy: Policy = field(default_factory=lambda: NumpyPolicy.random(0))
@@ -36,6 +50,7 @@ class ModelAgent:
     action_config: ActionDecodeConfig = ActionDecodeConfig()
     tracker: ProductionTracker = field(default_factory=ProductionTracker)
     comet_controller: CometController = field(default_factory=CometController)
+    min_source_ships_to_act: int = 11
 
     def act(self, obs: dict[str, Any]) -> list[list[float | int]]:
         planets = parse_planets(obs)
@@ -51,7 +66,15 @@ class ModelAgent:
         actions: list[Action] = self.comet_controller.update_and_forced_actions(
             obs, player, angular_velocity=angular_velocity, fleet_speed=fleet_speed
         )
-        for source in [p for p in planets if p.owner == player and p.id not in comet_ids]:
+        output_size = _infer_policy_output_size(self.policy)
+        enforce_min_source_ships = output_size == 2
+        for source in [
+            p
+            for p in planets
+            if p.owner == player
+            and p.id not in comet_ids
+            and (not enforce_min_source_ships or int(p.ships) >= self.min_source_ships_to_act)
+        ]:
             model_obs, chosen, proposed_launches = builder.build_filtered_for_source(
                 source,
                 planets,
