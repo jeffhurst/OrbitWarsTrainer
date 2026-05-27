@@ -14,10 +14,10 @@ def test_static_radius_orbiting_quadrant_comets_and_source_excluded():
     orbit_bad = planet(4, -1, 40, 40, prod=5)  # orbiting Q2
     comet = planet(5, -1, 82, 82, prod=9)
     selected = select_candidates(source, [source, static_in, static_out, orbit_good, orbit_bad, comet], 0, {5}).candidates
-    assert [p.id for p in selected] == [1, 3]
+    assert [p.id for p in selected] == [3, 1]
 
 
-def test_top_4_sorted_by_lowest_ships_then_non_friendly_then_production():
+def test_top_4_sorted_by_production_then_owner_priority_then_ships():
     source = planet(0, 0, 80, 80, prod=1)
     planets = [
         source,
@@ -28,7 +28,7 @@ def test_top_4_sorted_by_lowest_ships_then_non_friendly_then_production():
         planet(5, -1, 85, 80, ships=8, prod=2, radius=10),
     ]
     selected = select_candidates(source, planets, 0, set()).candidates
-    assert [p.id for p in selected] == [3, 2, 1, 4]
+    assert [p.id for p in selected] == [1, 2, 3, 5]
 
 
 def test_orbiting_source_uses_quadrant_static_selection():
@@ -40,7 +40,7 @@ def test_orbiting_source_uses_quadrant_static_selection():
     selected = select_candidates(
         source, [source, static_same_quadrant, static_near_other_quadrant, orbit_ccw, orbit_same_quadrant], 0, set()
     ).candidates
-    assert [p.id for p in selected] == [4, 3, 1]
+    assert [p.id for p in selected] == [1, 4, 3]
 
 
 def test_distance_tiebreak_with_same_owner_priority():
