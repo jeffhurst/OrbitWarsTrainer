@@ -91,6 +91,16 @@ def win_speed_multiplier(turn_index: int, max_episode_turns: int, config: Reward
     return float(2.0 ** (remaining_turns / reference_turns))
 
 
+def win_speed_bonus(turn_index: int, max_episode_turns: int, config: RewardShapingConfig | None = None) -> float:
+    """Backward-compatible additive fast-win bonus.
+
+    Preserves the historical API used by PPO environment call sites while the
+    new multiplier API is adopted.
+    """
+    cfg = config or RewardShapingConfig()
+    return float(cfg.win_reward * (win_speed_multiplier(turn_index, max_episode_turns, cfg) - 1.0))
+
+
 def game_outcome_reward(*, candidate_score: float, opponent_score: float, turn_index: int, max_episode_turns: int, config: RewardShapingConfig | None = None) -> float:
     cfg = config or RewardShapingConfig()
     if candidate_score > opponent_score:
