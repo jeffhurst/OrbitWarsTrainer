@@ -130,6 +130,11 @@ class DeterministicMapSeedEvalCallback(BaseCallback):
             verbose=True,
         )
         for key, value in metrics.items():
+            # Stable-Baselines3 table logger truncates long keys, which can collide
+            # for per-seed target choice counters (e.g. ...count_1 vs ...count_2).
+            # Keep aggregate/per-seed core metrics and skip collision-prone counters.
+            if "/target_choice_count_" in key:
+                continue
             self.logger.record(key, float(value))
         self._last_eval_rollout_count = self.rollout_count
 
