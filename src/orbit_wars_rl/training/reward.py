@@ -14,6 +14,7 @@ class RewardShapingConfig:
     timeout_min_reward: float = -60.0
     timeout_max_reward: float = 60.0
     fast_win_bonus: float = 300.0
+    fast_win_reference_fraction: float = 0.4
     loss_survival_bonus: float = 100.0
 
     production_adv_weight: float = 55.0
@@ -80,19 +81,20 @@ def ships_sent_reward(actions: Iterable, config: RewardShapingConfig | None = No
     return 0.0
 
 
-def win_speed_bonus(turn_index: int, max_episode_turns: int, config: RewardShapingConfig | None = None) -> float:
+def win_speed_multiplier(turn_index: int, max_episode_turns: int, config: RewardShapingConfig | None = None) -> float:
     cfg = config or RewardShapingConfig()
     if max_episode_turns <= 0:
-        return 0.0
+        return 1.0
     clamped_turn = min(max(1, int(turn_index)), int(max_episode_turns))
-    remaining_fraction = (max_episode_turns - clamped_turn) / max_episode_turns
-    return float(cfg.fast_win_bonus * remaining_fraction)
+    remaining_turns = max_episode_turns - clamped_turn
+    reference_turns = max(1.0, cfg.fast_win_reference_fraction * max_episode_turns)
+    return float(2.0 ** (remaining_turns / reference_turns))
 
 
 def game_outcome_reward(*, candidate_score: float, opponent_score: float, turn_index: int, max_episode_turns: int, config: RewardShapingConfig | None = None) -> float:
     cfg = config or RewardShapingConfig()
     if candidate_score > opponent_score:
-        return float(cfg.win_reward + win_speed_bonus(turn_index, max_episode_turns, cfg))
+        return float(cfg.win_reward * win_speed_multiplier(turn_index, max_episode_turns, cfg))
     if candidate_score < opponent_score:
         progress = min(max(turn_index, 1), max_episode_turns) / max(1, max_episode_turns)
         return float(cfg.loss_penalty + cfg.loss_survival_bonus * progress)

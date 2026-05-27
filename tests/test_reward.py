@@ -62,5 +62,16 @@ def test_strategic_score_favors_production_and_planets_over_ships_alone():
     assert strategic_score(prod_gain, 0) - base_score > strategic_score(ship_gain, 0) - base_score
 
 
+
+def test_terminal_win_reward_scales_by_rough_doubling_for_earlier_wins():
+    cfg = RewardShapingConfig()
+    near_500 = game_outcome_reward(candidate_score=100, opponent_score=10, turn_index=499, max_episode_turns=500, config=cfg)
+    around_300 = game_outcome_reward(candidate_score=100, opponent_score=10, turn_index=300, max_episode_turns=500, config=cfg)
+    around_100 = game_outcome_reward(candidate_score=100, opponent_score=10, turn_index=100, max_episode_turns=500, config=cfg)
+
+    assert near_500 > 0
+    assert around_300 == pytest.approx(2.0 * near_500, rel=0.01)
+    assert around_100 == pytest.approx(2.0 * around_300, rel=0.01)
+
 def test_missing_data_does_not_crash_reward_calculation():
     assert strategic_score({}, 0) == pytest.approx(0.0)
