@@ -66,6 +66,7 @@ from orbit_wars_rl.core.actions import (
     ActionDecodeConfig,
     decode_model_outputs,
     get_fleet_speed,
+    minimum_tactically_valid_send,
 )
 from orbit_wars_rl.core.candidates import CandidateConfig, comet_ids_from_obs
 from orbit_wars_rl.core.geometry import (
@@ -378,6 +379,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
     # action[1]: normalized amount bucket in [0, 100]
     action_space = spaces.MultiDiscrete([5, 101])
     min_source_ships_to_act = 11
+    capture_margin = 1
 
     def __init__(
         self,
@@ -498,9 +500,25 @@ class OrbitWarsPlanetStepEnv(gym.Env):
             return [True, False, False, False, False] + ([True] * 101)
         source = self.sources[min(self.current_source_index, len(self.sources) - 1)]
         _obs, filtered_candidates, _launches = self._current_obs_and_candidates(source)
-        can_send = self._can_source_send(source, filtered_candidates)
-        max_target = min(4, len(filtered_candidates))
-        target_mask = [True] + [can_send and (i <= max_target) for i in range(1, 5)]
+        remaining = max(0, int(source.ships) - max(0, self.action_config.reserve_ships))
+        meaningful_target_indices: list[int] = []
+        for idx, target in enumerate(filtered_candidates[:4], start=1):
+            min_send = minimum_tactically_valid_send(
+                target,
+                candidate_player=self.candidate_player,
+                remaining_ships=remaining,
+                capture_margin=self.capture_margin,
+            )
+            if min_send <= 0:
+                continue
+            if target.owner == self.candidate_player:
+                if remaining <= 0:
+                    continue
+            elif min_send > remaining:
+                continue
+            meaningful_target_indices.append(idx)
+        has_meaningful_action = bool(meaningful_target_indices)
+        target_mask = [not has_meaningful_action] + [i in meaningful_target_indices for i in range(1, 5)]
         amount_mask = [True] * 101
         return target_mask + amount_mask
 
@@ -854,13 +872,18 @@ class OrbitWarsPlanetStepEnv(gym.Env):
                 0.0,
                 min(1.0, amount_value / 100.0 if amount_value > 1.0 else amount_value),
             )
-            min_send = min(10, remaining)
+            target = candidates[idx]
+            min_send = minimum_tactically_valid_send(
+                target,
+                candidate_player=self.candidate_player,
+                remaining_ships=remaining,
+                capture_margin=self.capture_margin,
+            )
             span = max(0, remaining - min_send)
             ships = int(min_send + math.floor(pct * span))
             ships = min(max(min_send, ships), remaining)
             if ships <= 0:
                 return local_reward
-            target = candidates[idx]
             launch = predict_launch(
                 source, target, angular_velocity, get_fleet_speed(ships)
             )
