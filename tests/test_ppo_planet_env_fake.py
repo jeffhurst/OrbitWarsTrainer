@@ -202,7 +202,7 @@ def test_episode_components_have_no_pressure_or_waste_and_reward_totals_match():
     assert "reward/pressure" not in components
     assert "reward/waste_penalty" not in components
     assert "game/map_seed" in components
-    assert components["reward/total"] == pytest.approx(reward)
+    assert components["reward/step_total_scaled"] == pytest.approx(reward)
     assert reset_info["map_seed"] == int(components["game/map_seed"])
 
 

@@ -10,11 +10,11 @@ from orbit_wars_rl.core.types import Planet, parse_fleets, parse_planets
 @dataclass(frozen=True, slots=True)
 class RewardShapingConfig:
     win_reward: float = 600.0
-    loss_penalty: float = -600.0
+    loss_penalty: float = -1000.0
     timeout_min_reward: float = -60.0
     timeout_max_reward: float = 60.0
     fast_win_bonus: float = 300.0
-    loss_survival_bonus: float = 300.0
+    loss_survival_bonus: float = 100.0
 
     production_adv_weight: float = 55.0
     planet_adv_weight: float = 55.0
