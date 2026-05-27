@@ -10,16 +10,16 @@ def test_fake_planet_step_env_shapes_and_production_delta_reward():
     obs, info = env.reset(seed=123)
     assert obs.shape == (15,)
     assert info["source_id"] == 0
-    assert env.action_space.shape == (4,)
+    assert env.action_space.shape == (2,)
 
-    next_obs, reward, terminated, truncated, info = env.step([0] * 4)
+    next_obs, reward, terminated, truncated, info = env.step([0] * 2)
     assert next_obs.shape == (15,)
-    assert reward == 0.0
+    assert reward == pytest.approx(-0.001)
     assert terminated is False
     assert truncated is False
     assert info["turn_advanced"] is False
 
-    next_obs, reward, terminated, truncated, info = env.step([0] * 4)
+    next_obs, reward, terminated, truncated, info = env.step([0] * 2)
     assert next_obs.shape == (15,)
     assert info["turn_advanced"] is True
     assert info["production_delta"] == info["production_after"] - info["production_before"]
@@ -35,7 +35,7 @@ def test_planet_step_env_observes_and_decodes_filtered_candidates():
     env.obs = {
         "player": 0,
         "planets": [
-            [0, 0, 0, 50, 5, 10, 1],
+            [0, 0, 0, 50, 5, 12, 1],
             [1, 1, 100, 50, 5, 1, 9],
             [2, 1, 0, 80, 5, 2, 6],
         ],
@@ -45,7 +45,7 @@ def test_planet_step_env_observes_and_decodes_filtered_candidates():
     env._rebuild_sources()
 
     current_obs = env._current_obs()
-    _next_obs, _reward, _terminated, _truncated, info = env.step([5, 0, 0, 0])
+    _next_obs, _reward, _terminated, _truncated, info = env.step([1, 100])
 
     assert current_obs[3:6].tolist() == [-1, -2, 6]
     assert len(info["buffered_actions"]) == 1
@@ -210,10 +210,10 @@ def test_source_tactical_reward_rewards_saving_and_penalizes_missed_attacks():
     from orbit_wars_rl.core.types import Planet
 
     env = OrbitWarsPlanetStepEnv(require_kaggle=False)
-    source = Planet(0, 0, 80, 80, 2.0, 10, 1.0)
+    source = Planet(0, 0, 80, 80, 2.0, 20, 1.0)
     weak_enemy = Planet(2, 1, 83, 80, 2.0, 9, 1.0)
 
-    assert env._source_tactical_reward(source, [weak_enemy], [], []) > 0.0
+    assert env._source_tactical_reward(source, [weak_enemy], [], []) < 0.0
 
     under_send_reward = env._source_tactical_reward(
         source,
@@ -248,9 +248,58 @@ def test_action_masks_prevent_send_when_no_remaining_ships():
     env.current_source_index = 0
     env._current_obs_and_candidates = lambda _source: (None, [candidate], [])
 
-    target_mask, amount_mask = env.action_masks()
+    masks = env.action_masks()
+    target_mask, amount_mask = masks[:5], masks[5:]
     assert target_mask == [True, False, False, False, False]
     assert len(amount_mask) == 101
+
+
+def test_action_masks_noop_masked_when_capturable_target_exists():
+    env = OrbitWarsPlanetStepEnv(require_kaggle=False)
+    env.reset(seed=123)
+    from orbit_wars_rl.core.types import Planet
+
+    source = Planet(0, 0, 80, 80, 2.0, 20, 1.0)
+    enemy = Planet(2, 1, 83, 80, 2.0, 5, 1.0)
+    env.sources = [source]
+    env.current_source_index = 0
+    env._current_obs_and_candidates = lambda _source: (None, [enemy], [])
+    masks = env.action_masks()
+    target_mask = masks[:5]
+    assert target_mask[0] is False
+    assert target_mask[1] is True
+
+
+def test_action_masks_noop_allowed_when_no_meaningful_target_exists():
+    env = OrbitWarsPlanetStepEnv(require_kaggle=False)
+    env.reset(seed=123)
+    from orbit_wars_rl.core.types import Planet
+
+    source = Planet(0, 0, 80, 80, 2.0, 12, 1.0)
+    enemy = Planet(2, 1, 83, 80, 2.0, 100, 1.0)
+    env.sources = [source]
+    env.current_source_index = 0
+    env._current_obs_and_candidates = lambda _source: (None, [enemy], [])
+    masks = env.action_masks()
+    target_mask = masks[:5]
+    assert target_mask == [True, False, False, False, False]
+
+
+def test_action_masks_underpowered_enemy_target_masked_friendly_allowed():
+    env = OrbitWarsPlanetStepEnv(require_kaggle=False)
+    env.reset(seed=123)
+    from orbit_wars_rl.core.types import Planet
+
+    source = Planet(0, 0, 80, 80, 2.0, 12, 1.0)
+    enemy = Planet(2, 1, 83, 80, 2.0, 100, 1.0)
+    friendly = Planet(3, 0, 84, 80, 2.0, 30, 1.0)
+    env.sources = [source]
+    env.current_source_index = 0
+    env._current_obs_and_candidates = lambda _source: (None, [enemy, friendly], [])
+    masks = env.action_masks()
+    target_mask = masks[:5]
+    assert target_mask[1] is False
+    assert target_mask[2] is True
 
 
 def test_no_invalid_count_when_send_selected_but_source_cannot_send():

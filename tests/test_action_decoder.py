@@ -150,3 +150,11 @@ def test_precomputed_launches_do_not_bypass_dynamic_fleet_speed(monkeypatch):
 
     assert len(actions) == 1
     assert seen_speeds == [actions_mod.get_fleet_speed(99)]
+
+
+def test_two_value_decoder_enemy_send_has_capture_floor():
+    src = Planet(0, 0, 0, 0, 1, 20, 1)
+    enemy = Planet(1, 1, 10, 0, 1, 12, 1)
+    actions = decode_model_outputs(src, [enemy], [1, 0], ActionDecodeConfig(reserve_ships=1))
+    assert len(actions) == 1
+    assert actions[0].num_ships >= 13

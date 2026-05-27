@@ -49,6 +49,18 @@ def get_fleet_speed(num_ships: int) -> float:
 
 SEND_FRACTIONS = (0.0, 0.2, 0.4, 0.6, 0.8, 1.0)
 
+
+def minimum_tactically_valid_send(
+    target: Planet,
+    *,
+    candidate_player: int,
+    remaining_ships: int,
+    capture_margin: int = 1,
+) -> int:
+    if target.owner == candidate_player:
+        return 1 if remaining_ships > 0 else 0
+    return max(0, int(target.ships) + max(0, capture_margin))
+
 def decode_model_outputs(
     source: Planet,
     candidates: Sequence[Planet],
@@ -75,7 +87,15 @@ def decode_model_outputs(
         if idx < 0 or idx >= min(4, len(candidates)):
             return []
         target = candidates[idx]
-        min_send = min(10, remaining)
+        min_send = minimum_tactically_valid_send(
+            target,
+            candidate_player=int(source.owner),
+            remaining_ships=remaining,
+        )
+        if min_send <= 0:
+            return []
+        if target.owner != int(source.owner) and min_send > remaining:
+            return []
         amount_norm = clamp01(float(outputs[1]) / 100.0 if float(outputs[1]) > 1.0 else float(outputs[1]))
         span = max(0, remaining - min_send)
         ships = int(min_send + math.floor(amount_norm * span))

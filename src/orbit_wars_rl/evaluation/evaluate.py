@@ -69,16 +69,30 @@ def evaluate_map_seeds_deterministic(
         turns = 0
         terminal_reward = 0.0
         total_reward = 0.0
+        action_count = 0
+        noop_count = 0
+        pass_count = 0
+        ships_sent_total = 0.0
+        target_choice_counts = {target_choice: 0 for target_choice in range(5)}
         while not done:
             action_masks = env.action_masks() if hasattr(env, "action_masks") else None
             action = _predict_deterministic(policy, obs, action_masks=action_masks)
             obs, reward, terminated, truncated, info = env.step(action)
             total_reward += float(reward)
+            action_values = [int(x) for x in action] if hasattr(action, "__iter__") else [int(action)]
+            target_choice = action_values[0] if action_values else 0
+            if target_choice in target_choice_counts:
+                target_choice_counts[target_choice] += 1
+            action_count += 1
+            if target_choice == 0:
+                noop_count += 1
+                pass_count += 1
             if info.get("turn_advanced"):
                 turns = int(info.get("turn_index", turns + 1))
             done = bool(terminated or truncated)
             if done:
                 terminal_reward = float(info.get("terminal_reward", 0.0))
+        ships_sent_total = float(getattr(env, "episode_ships_sent_total", 0.0))
 
         result = {
             "map_seed": float(map_seed),
@@ -86,7 +100,12 @@ def evaluate_map_seeds_deterministic(
             "avg_turns": float(turns),
             "avg_terminal_reward": terminal_reward,
             "total_reward": total_reward,
+            "noop_rate": noop_count / max(1, action_count),
+            "pass_rate": pass_count / max(1, action_count),
+            "ships_sent_mean": ships_sent_total / max(1, action_count),
         }
+        for target_choice, count in target_choice_counts.items():
+            result[f"target_choice_count_{target_choice}"] = float(count)
         results.append(result)
         if verbose:
             print(f"eval/map_seed_{index}: {map_seed}")
@@ -100,6 +119,12 @@ def evaluate_map_seeds_deterministic(
                 "  "
                 f"eval/map_seed_{map_seed}/avg_terminal_reward: "
                 f"{result['avg_terminal_reward']:.4f}"
+            )
+            print(f"  eval/map_seed_{map_seed}/noop_rate: {result['noop_rate']:.4f}")
+            print(f"  eval/map_seed_{map_seed}/pass_rate: {result['pass_rate']:.4f}")
+            print(
+                f"  eval/map_seed_{map_seed}/ships_sent_mean: "
+                f"{result['ships_sent_mean']:.4f}"
             )
 
     metrics: dict[str, float] = {
@@ -119,6 +144,13 @@ def evaluate_map_seeds_deterministic(
         ]
         metrics[f"eval/map_seed_{seed}/avg_turns"] = result["avg_turns"]
         metrics[f"eval/map_seed_{seed}/avg_terminal_reward"] = result["avg_terminal_reward"]
+        metrics[f"eval/map_seed_{seed}/noop_rate"] = result["noop_rate"]
+        metrics[f"eval/map_seed_{seed}/pass_rate"] = result["pass_rate"]
+        metrics[f"eval/map_seed_{seed}/ships_sent_mean"] = result["ships_sent_mean"]
+        for target_choice in range(5):
+            metrics[f"eval/map_seed_{seed}/target_choice_count_{target_choice}"] = result[
+                f"target_choice_count_{target_choice}"
+            ]
     return metrics, results
 
 

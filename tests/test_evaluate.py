@@ -145,6 +145,10 @@ def test_map_seed_eval_uses_deterministic_predict_and_logs_per_seed(monkeypatch)
     assert metrics["eval/map_seed_11/win_rate_deterministic"] == pytest.approx(1.0)
     assert metrics["eval/map_seed_12/win_rate_deterministic"] == pytest.approx(0.0)
     assert metrics["eval/map_seed/win_rate_deterministic"] == pytest.approx(0.5)
+    assert "eval/map_seed_11/noop_rate" in metrics
+    assert "eval/map_seed_11/pass_rate" in metrics
+    assert "eval/map_seed_11/ships_sent_mean" in metrics
+    assert "eval/map_seed_11/target_choice_count_0" in metrics
     assert ScriptedMapSeedEnv.instances[0].opponent == "greedy"
     assert ScriptedMapSeedEnv.instances[0].candidate_player == 1
     assert ScriptedMapSeedEnv.instances[0].max_episode_turns == 22
