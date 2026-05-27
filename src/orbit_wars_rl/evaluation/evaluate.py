@@ -173,12 +173,12 @@ def _evaluate_planet_step(
             if target_choice == 0:
                 noop_count += 1
                 pass_count += 1
-            invalid_count += int(info.get("action_invalid", False))
-            ships_sent_total += float(info.get("ships_sent", 0.0))
             if info.get("turn_advanced"):
                 prod_deltas.append(float(info.get("production_delta", 0.0)))
                 length += 1
             done = bool(terminated or truncated)
+        invalid_count += int(getattr(env, "episode_invalid_action_count", 0))
+        ships_sent_total += float(getattr(env, "episode_ships_sent_total", 0.0))
         planets = parse_planets(env.obs)
         rewards.append(total_reward)
         final_candidate_production.append(total_production(planets, 0))
