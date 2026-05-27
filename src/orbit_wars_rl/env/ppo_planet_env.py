@@ -1,14 +1,17 @@
 """Gymnasium planet-step wrapper for PPO Orbit Wars training."""
+
 from __future__ import annotations
 
-from pathlib import Path
 import math
 import random
+from pathlib import Path
 from typing import Any
 
 try:
     import numpy as np
-except Exception as exc:  # pragma: no cover - exercised only when numpy is missing/broken.
+except (
+    Exception
+) as exc:  # pragma: no cover - exercised only when numpy is missing/broken.
     raise RuntimeError(
         "OrbitWarsPlanetStepEnv requires NumPy. Install dependencies with "
         "`pip install -e .` (or at least `pip install numpy`)."
@@ -18,6 +21,7 @@ try:  # Keep non-RL imports usable when gymnasium is not installed.
     import gymnasium as gym
     from gymnasium import spaces
 except Exception:  # pragma: no cover - exercised only in minimal installations.
+
     class _Box:
         def __init__(self, low: float, high: float, shape: tuple[int, ...], dtype: Any):
             self.low = low
@@ -38,6 +42,7 @@ except Exception:  # pragma: no cover - exercised only in minimal installations.
     class _Spaces:
         Box = _Box
         MultiDiscrete = _MultiDiscrete
+
         class Discrete:
             def __init__(self, n: int):
                 self.n = int(n)
@@ -57,13 +62,17 @@ from orbit_wars_rl.agents.model_agent import ModelAgent
 from orbit_wars_rl.agents.random_agent import RandomAgent
 from orbit_wars_rl.agents.starter_agent import StarterAgent
 from orbit_wars_rl.core.actions import (
+    SEND_FRACTIONS,
     ActionDecodeConfig,
     decode_model_outputs,
     get_fleet_speed,
-    SEND_FRACTIONS,
 )
 from orbit_wars_rl.core.candidates import CandidateConfig, comet_ids_from_obs
-from orbit_wars_rl.core.geometry import predict_launch, sun_collision_radius_from_obs, trajectory_crosses_sun
+from orbit_wars_rl.core.geometry import (
+    predict_launch,
+    sun_collision_radius_from_obs,
+    trajectory_crosses_sun,
+)
 from orbit_wars_rl.core.observations import ObservationBuilder
 from orbit_wars_rl.core.planets import total_production
 from orbit_wars_rl.core.types import Planet, parse_planets, rows
@@ -71,14 +80,134 @@ from orbit_wars_rl.env.kaggle_env import require_kaggle_env
 from orbit_wars_rl.models.save_load import load_any_policy
 
 MAP_SEEDS = [
-    5199, 2083, 3493, 1649, 3233, 405, 3335, 1030, 1467, 78, 32, 1900, 647, 417, 1, 2560,
-    272, 585, 1265, 741, 489, 2537, 422, 787, 455, 324, 119, 828, 1049, 906, 1117, 1990,
-    5274, 2661, 3774, 2794, 3578, 7045, 4333, 1153, 2412, 1750, 2078, 2957, 1843, 451, 1725, 4676,
-    662, 1217, 4461, 4785, 5675, 3403, 4814, 1336, 2996, 2509, 3959, 2867, 2572, 2476, 1282, 2393,
-    7542, 6328, 5923, 4252, 4027, 9408, 4693, 2726, 3154, 7166, 6858, 4393, 2177, 2663, 1948, 6475,
-    4353, 6462, 5981, 8516, 7770, 6593, 4963, 3473, 3520, 7337, 8763, 9017, 6202, 5047, 1571, 6294,
-    8909, 9327, 8514, 9240, 6548, 9658, 9812, 8686, 8717, 8866, 7079, 9306, 7314, 8782, 2419, 8526,
-    9118, 9984, 8855, 9227, 8624, 8968, 7186, 9013, 4633, 8603, 9102, 9547, 9453, 7947, 3462, 9427,
+    5199,
+    2083,
+    3493,
+    1649,
+    3233,
+    405,
+    3335,
+    1030,
+    1467,
+    78,
+    32,
+    1900,
+    647,
+    417,
+    1,
+    2560,
+    272,
+    585,
+    1265,
+    741,
+    489,
+    2537,
+    422,
+    787,
+    455,
+    324,
+    119,
+    828,
+    1049,
+    906,
+    1117,
+    1990,
+    5274,
+    2661,
+    3774,
+    2794,
+    3578,
+    7045,
+    4333,
+    1153,
+    2412,
+    1750,
+    2078,
+    2957,
+    1843,
+    451,
+    1725,
+    4676,
+    662,
+    1217,
+    4461,
+    4785,
+    5675,
+    3403,
+    4814,
+    1336,
+    2996,
+    2509,
+    3959,
+    2867,
+    2572,
+    2476,
+    1282,
+    2393,
+    7542,
+    6328,
+    5923,
+    4252,
+    4027,
+    9408,
+    4693,
+    2726,
+    3154,
+    7166,
+    6858,
+    4393,
+    2177,
+    2663,
+    1948,
+    6475,
+    4353,
+    6462,
+    5981,
+    8516,
+    7770,
+    6593,
+    4963,
+    3473,
+    3520,
+    7337,
+    8763,
+    9017,
+    6202,
+    5047,
+    1571,
+    6294,
+    8909,
+    9327,
+    8514,
+    9240,
+    6548,
+    9658,
+    9812,
+    8686,
+    8717,
+    8866,
+    7079,
+    9306,
+    7314,
+    8782,
+    2419,
+    8526,
+    9118,
+    9984,
+    8855,
+    9227,
+    8624,
+    8968,
+    7186,
+    9013,
+    4633,
+    8603,
+    9102,
+    9547,
+    9453,
+    7947,
+    3462,
+    9427,
 ]
 
 from orbit_wars_rl.training.reward import (
@@ -163,19 +292,31 @@ def _extract_player_observation(env: Any, player: int) -> dict[str, Any]:
     state = getattr(env, "state", None)
     if state:
         item = state[player]
-        obs = item.get("observation") if isinstance(item, dict) else getattr(item, "observation", item)
+        obs = (
+            item.get("observation")
+            if isinstance(item, dict)
+            else getattr(item, "observation", item)
+        )
         return {**_as_observation_dict(obs), "player": player}
     if hasattr(env, "toJSON"):
         data = env.toJSON()
         steps = data.get("steps") if isinstance(data, dict) else None
         if steps:
             latest = steps[-1][player]
-            obs = latest.get("observation", latest) if isinstance(latest, dict) else latest
+            obs = (
+                latest.get("observation", latest)
+                if isinstance(latest, dict)
+                else latest
+            )
             return {**_as_observation_dict(obs), "player": player}
-    raise RuntimeError("Could not extract a player observation from the Kaggle environment state.")
+    raise RuntimeError(
+        "Could not extract a player observation from the Kaggle environment state."
+    )
 
 
-def _step_kaggle_env(env: Any, actions_for_player0: list, actions_for_player1: list) -> None:
+def _step_kaggle_env(
+    env: Any, actions_for_player0: list, actions_for_player1: list
+) -> None:
     if not callable(getattr(env, "step", None)):
         raise RuntimeError(
             "PPO planet-step training requires stepwise Kaggle environment access, but this "
@@ -198,8 +339,13 @@ def _is_kaggle_done(env: Any) -> bool:
         return bool(done)
     state = getattr(env, "state", None)
     if state:
-        statuses = [s.get("status") if isinstance(s, dict) else getattr(s, "status", None) for s in state]
-        return any(str(status).upper() in {"DONE", "ERROR", "INVALID"} for status in statuses)
+        statuses = [
+            s.get("status") if isinstance(s, dict) else getattr(s, "status", None)
+            for s in state
+        ]
+        return any(
+            str(status).upper() in {"DONE", "ERROR", "INVALID"} for status in statuses
+        )
     return False
 
 
@@ -210,7 +356,11 @@ def _terminal_state_rewards(env: Any) -> tuple[float, float] | None:
         return None
     rewards: list[float] = []
     for slot in state[:2]:
-        value = slot.get("reward") if isinstance(slot, dict) else getattr(slot, "reward", None)
+        value = (
+            slot.get("reward")
+            if isinstance(slot, dict)
+            else getattr(slot, "reward", None)
+        )
         if value is None:
             return None
         rewards.append(float(value))
@@ -221,7 +371,9 @@ class OrbitWarsPlanetStepEnv(gym.Env):
     """Each SB3 step controls one owned planet; full Kaggle turn advances after all sources."""
 
     metadata = {"render_modes": []}
-    observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(15,), dtype=np.float32)
+    observation_space = spaces.Box(
+        low=-np.inf, high=np.inf, shape=(15,), dtype=np.float32
+    )
     # action[0]: target selection (0=pass, 1..4=candidate index)
     # action[1]: normalized amount bucket in [0, 100]
     action_space = spaces.MultiDiscrete([5, 101])
@@ -243,7 +395,9 @@ class OrbitWarsPlanetStepEnv(gym.Env):
             if opponent_model is None:
                 raise ValueError("opponent_model is required when opponent='model'")
         else:
-            raise ValueError("opponent must be one of: 'starter', 'random', 'greedy', 'hard', 'model'")
+            raise ValueError(
+                "opponent must be one of: 'starter', 'random', 'greedy', 'hard', 'model'"
+            )
         if candidate_player not in (0, 1):
             raise ValueError("candidate_player must be 0 or 1")
         self.opponent = opponent
@@ -294,7 +448,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         if map_seed_opt is not None:
             map_seed = int(map_seed_opt)
         else:
-            if len(self._seed_cycle) < 5:
+            if len(self._seed_cycle) < 28:
                 self._seed_cycle = MAP_SEEDS.copy()
                 self._map_seed_rng.shuffle(self._seed_cycle)
             map_seed = self._seed_cycle.pop()
@@ -325,8 +479,14 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         self.episode_neutral_captures = 0
         self.episode_return_scaled = 0.0
         self._rebuild_sources()
-        self.previous_total_production = total_production(parse_planets(self.obs), self.candidate_player)
-        return self._current_obs(), {"source_id": self._current_source_id(), "no_source": not self.sources, "map_seed": map_seed}
+        self.previous_total_production = total_production(
+            parse_planets(self.obs), self.candidate_player
+        )
+        return self._current_obs(), {
+            "source_id": self._current_source_id(),
+            "no_source": not self.sources,
+            "map_seed": map_seed,
+        }
 
     def _can_source_send(self, source: Planet, candidates: list[Planet]) -> bool:
         remaining = max(0, int(source.ships) - max(0, self.action_config.reserve_ships))
@@ -350,8 +510,8 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         if not self.sources:
             return self._advance_turn([])
         source = self.sources[self.current_source_index]
-        _model_obs, filtered_candidates, proposed_launches = self._current_obs_and_candidates(
-            source
+        _model_obs, filtered_candidates, proposed_launches = (
+            self._current_obs_and_candidates(source)
         )
         decoded = decode_model_outputs(
             source,
@@ -365,7 +525,9 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         )
         decoded_rows = rows(decoded)
         self.episode_action_count += 1
-        self.episode_ships_sent_total += float(sum(float(row[2]) for row in decoded_rows if len(row) >= 3))
+        self.episode_ships_sent_total += float(
+            sum(float(row[2]) for row in decoded_rows if len(row) >= 3)
+        )
         action_values = np.asarray(action, dtype=np.float32).reshape(-1).tolist()
         target_choice = int(action_values[0]) if action_values else 0
         if 1 <= target_choice <= min(len(filtered_candidates), 4):
@@ -381,12 +543,19 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         can_send = self._can_source_send(source, filtered_candidates)
         if chose_send and can_send and not decoded_rows:
             self.episode_invalid_action_count += 1
-        tactical_reward = self._source_tactical_reward(source, filtered_candidates, decoded_rows, action_values)
-        send_reward = ships_sent_reward(decoded_rows, self.reward_config) + tactical_reward
+        tactical_reward = self._source_tactical_reward(
+            source, filtered_candidates, decoded_rows, action_values
+        )
+        send_reward = (
+            ships_sent_reward(decoded_rows, self.reward_config) + tactical_reward
+        )
         self.buffered_actions.extend(decoded_rows)
         self.current_source_index += 1
         if self.current_source_index < len(self.sources):
-            per_action_reward = float((send_reward / max(1, len(self.sources))) * self.reward_config.reward_scale)
+            per_action_reward = float(
+                (send_reward / max(1, len(self.sources)))
+                * self.reward_config.reward_scale
+            )
             return (
                 self._current_obs(),
                 per_action_reward,
@@ -405,7 +574,9 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         if self.env is None:
             raise RuntimeError("reset() must be called before advancing a turn.")
         if self.opponent_agent is None:
-            raise RuntimeError("reset() must build an opponent agent before advancing a turn.")
+            raise RuntimeError(
+                "reset() must build an opponent agent before advancing a turn."
+            )
         opponent_player = 1 - self.candidate_player
         opponent_obs = _extract_player_observation(self.env, opponent_player)
         opponent_actions = self.opponent_agent.act(opponent_obs)
@@ -414,7 +585,9 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         production_before = self.previous_total_production
         prod_adv_before = production_advantage(self.obs, self.candidate_player)
         score_adv_before = score_advantage(self.obs, self.candidate_player)
-        strategic_before = strategic_score(self.obs, self.candidate_player, self.reward_config)
+        strategic_before = strategic_score(
+            self.obs, self.candidate_player, self.reward_config
+        )
         ship_score_before = player_score(self.obs, self.candidate_player)
         enemy_ship_score_before = player_score(self.obs, opponent_player)
         ship_adv_before = ship_score_before - enemy_ship_score_before
@@ -427,7 +600,9 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         production_delta = float(current_total - production_before)
         prod_adv_after = production_advantage(self.obs, self.candidate_player)
         score_adv_after = score_advantage(self.obs, self.candidate_player)
-        strategic_after = strategic_score(self.obs, self.candidate_player, self.reward_config)
+        strategic_after = strategic_score(
+            self.obs, self.candidate_player, self.reward_config
+        )
         ship_score_after = player_score(self.obs, self.candidate_player)
         enemy_ship_score_after = player_score(self.obs, opponent_player)
         ship_adv_after = ship_score_after - enemy_ship_score_after
@@ -439,22 +614,53 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         )
         for after in planets_after:
             before = next((p for p in planets_before if p.id == after.id), None)
-            if before is not None and before.owner != after.owner and after.owner == self.candidate_player:
+            if (
+                before is not None
+                and before.owner != after.owner
+                and after.owner == self.candidate_player
+            ):
                 if before.owner == opponent_player:
                     self.episode_enemy_captures += 1
                 elif before.owner < 0:
                     self.episode_neutral_captures += 1
         invalid_action_penalty = 0.0
-        enemy_captured = sum(1 for before in planets_before for after in planets_after if before.id == after.id and before.owner == self.candidate_player and after.owner == opponent_player)
-        we_captured = sum(1 for before in planets_before for after in planets_after if before.id == after.id and before.owner != self.candidate_player and after.owner == self.candidate_player)
+        enemy_captured = sum(
+            1
+            for before in planets_before
+            for after in planets_after
+            if before.id == after.id
+            and before.owner == self.candidate_player
+            and after.owner == opponent_player
+        )
+        we_captured = sum(
+            1
+            for before in planets_before
+            for after in planets_after
+            if before.id == after.id
+            and before.owner != self.candidate_player
+            and after.owner == self.candidate_player
+        )
         net_capture_delta = we_captured - enemy_captured
-        ship_delta_reward = self.reward_config.ship_delta_weight * ((ship_score_after - enemy_ship_score_after) / max(1.0, ship_score_after + enemy_ship_score_after))
-        production_delta_reward = self.reward_config.production_delta_weight * prod_adv_after
+        ship_delta_reward = self.reward_config.ship_delta_weight * (
+            (ship_score_after - enemy_ship_score_after)
+            / max(1.0, ship_score_after + enemy_ship_score_after)
+        )
+        production_delta_reward = (
+            self.reward_config.production_delta_weight * prod_adv_after
+        )
         capture_delta_reward = self.reward_config.net_capture_weight * net_capture_delta
-        dense_reward = float(strategic_delta + ship_delta_reward + production_delta_reward + capture_delta_reward + send_reward)
+        dense_reward = float(
+            strategic_delta
+            + ship_delta_reward
+            + production_delta_reward
+            + capture_delta_reward
+            + send_reward
+        )
         clip = self.reward_config.dense_reward_clip
         dense_reward = float(max(-clip, min(clip, dense_reward)))
-        num_owned_planets = max(1, sum(1 for p in planets_before if p.owner == self.candidate_player))
+        num_owned_planets = max(
+            1, sum(1 for p in planets_before if p.owner == self.candidate_player)
+        )
         team_reward = float(dense_reward + capture_reward + invalid_action_penalty)
         reward = float(team_reward / num_owned_planets)
         terminal_reward = 0.0
@@ -468,14 +674,18 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         opponent_has_planets = any(p.owner == opponent_player for p in planets)
         env_done = _is_kaggle_done(self.env)
         reached_turn_limit = self.turn_index >= self.max_episode_turns
-        terminated = env_done or (not candidate_has_planets) or (not opponent_has_planets)
+        terminated = (
+            env_done or (not candidate_has_planets) or (not opponent_has_planets)
+        )
         truncated = reached_turn_limit and not terminated
         if terminated or truncated:
             candidate_score = player_score(self.obs, self.candidate_player)
             opponent_score = player_score(self.obs, opponent_player)
             state_rewards = _terminal_state_rewards(self.env)
             if truncated and not terminated:
-                terminal_reward = timeout_outcome_reward(candidate_score, opponent_score, self.reward_config)
+                terminal_reward = timeout_outcome_reward(
+                    candidate_score, opponent_score, self.reward_config
+                )
             else:
                 if state_rewards is not None and state_rewards[0] != state_rewards[1]:
                     candidate_state_reward = state_rewards[self.candidate_player]
@@ -483,11 +693,20 @@ class OrbitWarsPlanetStepEnv(gym.Env):
                     if candidate_state_reward > opponent_state_reward:
                         terminal_reward = float(
                             self.reward_config.win_reward
-                            + win_speed_bonus(self.turn_index, self.max_episode_turns, self.reward_config)
+                            + win_speed_bonus(
+                                self.turn_index,
+                                self.max_episode_turns,
+                                self.reward_config,
+                            )
                         )
                     else:
-                        progress = min(max(self.turn_index, 1), self.max_episode_turns) / max(1, self.max_episode_turns)
-                        terminal_reward = float(self.reward_config.loss_penalty + self.reward_config.loss_survival_bonus * progress)
+                        progress = min(
+                            max(self.turn_index, 1), self.max_episode_turns
+                        ) / max(1, self.max_episode_turns)
+                        terminal_reward = float(
+                            self.reward_config.loss_penalty
+                            + self.reward_config.loss_survival_bonus * progress
+                        )
                 else:
                     terminal_reward = game_outcome_reward(
                         candidate_score=candidate_score,
@@ -568,10 +787,18 @@ class OrbitWarsPlanetStepEnv(gym.Env):
                     "game/map_seed": float(self.current_map_seed or -1),
                     "game/our_captures_this_turn": float(we_captured),
                     "game/enemy_captures_this_turn": float(enemy_captured),
-                    "action/invalid_rate": float(self.episode_invalid_action_count / max(1, self.episode_action_count)),
-                    "action/ships_sent_mean": float(self.episode_ships_sent_total / max(1, self.episode_action_count)),
+                    "action/invalid_rate": float(
+                        self.episode_invalid_action_count
+                        / max(1, self.episode_action_count)
+                    ),
+                    "action/ships_sent_mean": float(
+                        self.episode_ships_sent_total
+                        / max(1, self.episode_action_count)
+                    ),
                     "game/pool_size": float(len(self._seed_cycle)),
-                } if (terminated or truncated) else None,
+                }
+                if (terminated or truncated)
+                else None,
             },
         )
 
@@ -600,7 +827,11 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         self.current_source_index = 0
 
     def _source_tactical_reward(
-        self, source: Planet, candidates: list[Planet], decoded_rows: list[list[float]], action_values: list[float]
+        self,
+        source: Planet,
+        candidates: list[Planet],
+        decoded_rows: list[list[float]],
+        action_values: list[float],
     ) -> float:
         if not decoded_rows:
             return 0.01
@@ -617,7 +848,10 @@ class OrbitWarsPlanetStepEnv(gym.Env):
             if idx < 0 or idx >= min(4, len(candidates)):
                 return local_reward
             amount_value = float(action_values[1]) if len(action_values) > 1 else 0.0
-            pct = max(0.0, min(1.0, amount_value / 100.0 if amount_value > 1.0 else amount_value))
+            pct = max(
+                0.0,
+                min(1.0, amount_value / 100.0 if amount_value > 1.0 else amount_value),
+            )
             min_send = min(10, remaining)
             span = max(0, remaining - min_send)
             ships = int(min_send + math.floor(pct * span))
@@ -625,8 +859,12 @@ class OrbitWarsPlanetStepEnv(gym.Env):
             if ships <= 0:
                 return local_reward
             target = candidates[idx]
-            launch = predict_launch(source, target, angular_velocity, get_fleet_speed(ships))
-            if trajectory_crosses_sun(launch.source_xy, launch.target_xy, sun_radius=sun_radius):
+            launch = predict_launch(
+                source, target, angular_velocity, get_fleet_speed(ships)
+            )
+            if trajectory_crosses_sun(
+                launch.source_xy, launch.target_xy, sun_radius=sun_radius
+            ):
                 return local_reward
             if target.owner != self.candidate_player and ships < int(target.ships):
                 target_ships = max(1, int(target.ships))
@@ -644,7 +882,10 @@ class OrbitWarsPlanetStepEnv(gym.Env):
             else:
                 if (idx * 2 + 1) >= len(action_values):
                     break
-                active = float(action_values[idx * 2]) > self.action_config.activation_threshold
+                active = (
+                    float(action_values[idx * 2])
+                    > self.action_config.activation_threshold
+                )
                 if not active:
                     continue
                 pct = max(0.0, min(1.0, float(action_values[idx * 2 + 1])))
@@ -654,8 +895,12 @@ class OrbitWarsPlanetStepEnv(gym.Env):
             if ships <= 0:
                 continue
             target = candidates[idx]
-            launch = predict_launch(source, target, angular_velocity, get_fleet_speed(ships))
-            if trajectory_crosses_sun(launch.source_xy, launch.target_xy, sun_radius=sun_radius):
+            launch = predict_launch(
+                source, target, angular_velocity, get_fleet_speed(ships)
+            )
+            if trajectory_crosses_sun(
+                launch.source_xy, launch.target_xy, sun_radius=sun_radius
+            ):
                 continue
             remaining -= ships
             if target.owner != self.candidate_player and ships < int(target.ships):
