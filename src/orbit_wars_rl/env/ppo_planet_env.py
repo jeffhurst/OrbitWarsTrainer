@@ -492,17 +492,17 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         remaining = max(0, int(source.ships) - max(0, self.action_config.reserve_ships))
         return remaining > 0 and bool(candidates)
 
-    def action_masks(self) -> tuple[list[bool], list[bool]]:
-        """Mask invalid per-dimension MultiDiscrete choices for the current source."""
+    def action_masks(self) -> list[bool]:
+        """Return flattened MultiDiscrete masks: 5 target choices + 101 amount buckets."""
         if not self.sources:
-            return [True, False, False, False, False], [True] * 101
+            return [True, False, False, False, False] + ([True] * 101)
         source = self.sources[min(self.current_source_index, len(self.sources) - 1)]
         _obs, filtered_candidates, _launches = self._current_obs_and_candidates(source)
         can_send = self._can_source_send(source, filtered_candidates)
         max_target = min(4, len(filtered_candidates))
         target_mask = [True] + [can_send and (i <= max_target) for i in range(1, 5)]
         amount_mask = [True] * 101
-        return target_mask, amount_mask
+        return target_mask + amount_mask
 
     def step(self, action):
         if self.env is None:
@@ -834,7 +834,9 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         action_values: list[float],
     ) -> float:
         if not decoded_rows:
-            return 0.01
+            if candidates and source.ships >= 20:
+                return -0.02
+            return 0.0
         local_reward = 0.0
         remaining = max(0, int(source.ships) - max(0, self.action_config.reserve_ships))
         output_len = 8 if len(action_values) == 9 else len(action_values)

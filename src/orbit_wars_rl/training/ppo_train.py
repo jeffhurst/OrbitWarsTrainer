@@ -25,6 +25,7 @@ def train_ppo(config: PPOTrainConfig) -> Path:
     config.validate()
     from stable_baselines3 import PPO
     from stable_baselines3.common.callbacks import CallbackList
+    from sb3_contrib import MaskablePPO
     import torch as th
 
     from orbit_wars_rl.env.ppo_planet_env import MAP_SEEDS, OrbitWarsPlanetStepEnv
@@ -49,7 +50,8 @@ def train_ppo(config: PPOTrainConfig) -> Path:
         net_arch=dict(pi=list(config.net_arch), vf=list(config.net_arch)),
         log_std_init=-2.0,
     )
-    model = PPO(
+    model_cls = MaskablePPO if config.use_action_masking else PPO
+    model = model_cls(
         "MlpPolicy",
         env,
         learning_rate=config.learning_rate,

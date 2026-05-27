@@ -37,6 +37,18 @@ def main() -> None:
     parser.add_argument("--candidate-player", type=int, default=defaults.candidate_player)
     parser.add_argument("--max-episode-turns", type=int, default=defaults.max_episode_turns)
     parser.add_argument("--tensorboard-log", default=defaults.tensorboard_log)
+    mask_group = parser.add_mutually_exclusive_group()
+    mask_group.add_argument(
+        "--use-action-masking",
+        dest="use_action_masking",
+        action="store_true",
+        default=defaults.use_action_masking,
+    )
+    mask_group.add_argument(
+        "--no-action-masking",
+        dest="use_action_masking",
+        action="store_false",
+    )
     parser.add_argument(
         "--eval-freq-rollouts",
         type=int,
@@ -108,6 +120,7 @@ def main() -> None:
         deterministic_eval=args.deterministic_eval,
         eval_freq_rollouts=args.eval_freq_rollouts,
         eval_seed_limit=args.eval_seed_limit,
+        use_action_masking=args.use_action_masking,
     )
     print(f"wrote {train_ppo(config)}")
 

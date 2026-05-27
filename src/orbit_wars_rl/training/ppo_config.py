@@ -44,6 +44,7 @@ class PPOTrainConfig:
     deterministic_eval: bool = True
     eval_freq_rollouts: int | None = None
     eval_seed_limit: int | None = None
+    use_action_masking: bool = True
 
     def validate(self) -> None:
         """Raise ``ValueError`` if this config requests unsupported PPO training."""
