@@ -24,9 +24,14 @@ def _mean(values: list[float], default: float = 0.0) -> float:
     return sum(values) / len(values) if values else default
 
 
-def _predict_deterministic(policy, obs):
+def _predict_deterministic(policy, obs, action_masks=None):
     try:
-        prediction = policy.predict(obs, deterministic=True)
+        if action_masks is not None:
+            prediction = policy.predict(
+                obs, deterministic=True, action_masks=action_masks
+            )
+        else:
+            prediction = policy.predict(obs, deterministic=True)
     except TypeError:
         prediction = policy.predict(obs)
     if isinstance(prediction, tuple):
@@ -65,7 +70,8 @@ def evaluate_map_seeds_deterministic(
         terminal_reward = 0.0
         total_reward = 0.0
         while not done:
-            action = _predict_deterministic(policy, obs)
+            action_masks = env.action_masks() if hasattr(env, "action_masks") else None
+            action = _predict_deterministic(policy, obs, action_masks=action_masks)
             obs, reward, terminated, truncated, info = env.step(action)
             total_reward += float(reward)
             if info.get("turn_advanced"):
@@ -138,6 +144,12 @@ def _evaluate_planet_step(
     final_candidate_scores: list[float] = []
     final_opponent_scores: list[float] = []
     lengths: list[int] = []
+    noop_count = 0
+    pass_count = 0
+    invalid_count = 0
+    ships_sent_total = 0.0
+    action_count = 0
+    target_choice_counts = {target_choice: 0 for target_choice in range(5)}
     for game in range(games):
         env = OrbitWarsPlanetStepEnv(
             require_kaggle=require_kaggle,
@@ -149,9 +161,20 @@ def _evaluate_planet_step(
         total_reward = 0.0
         length = 0
         while not done:
-            action = _predict_deterministic(policy, obs)
+            action_masks = env.action_masks() if hasattr(env, "action_masks") else None
+            action = _predict_deterministic(policy, obs, action_masks=action_masks)
             obs, reward, terminated, truncated, info = env.step(action)
             total_reward += float(reward)
+            action_values = [int(x) for x in action] if hasattr(action, "__iter__") else [int(action)]
+            target_choice = action_values[0] if action_values else 0
+            if target_choice in target_choice_counts:
+                target_choice_counts[target_choice] += 1
+            action_count += 1
+            if target_choice == 0:
+                noop_count += 1
+                pass_count += 1
+            invalid_count += int(info.get("action_invalid", False))
+            ships_sent_total += float(info.get("ships_sent", 0.0))
             if info.get("turn_advanced"):
                 prod_deltas.append(float(info.get("production_delta", 0.0)))
                 length += 1
@@ -174,9 +197,24 @@ def _evaluate_planet_step(
         "average_episode_length": _mean([float(length) for length in lengths]),
         "win_rate": sum(c > o for c, o in zip(final_candidate_scores, final_opponent_scores))
         / max(1, games),
-        "invalid_actions": 0.0,
+        "invalid_actions": float(invalid_count),
+        "eval/noop_rate": noop_count / max(1, action_count),
+        "eval/pass_rate": pass_count / max(1, action_count),
+        "eval/invalid_rate": invalid_count / max(1, action_count),
+        "eval/ships_sent_mean": ships_sent_total / max(1, action_count),
         "backend": backend,
     }
+    for target_choice in range(5):
+        metrics[f"eval/target_choice_count_{target_choice}"] = float(
+            target_choice_counts[target_choice]
+        )
+    print(
+        "eval metrics:"
+        f" noop_rate={metrics['eval/noop_rate']:.4f}"
+        f" pass_rate={metrics['eval/pass_rate']:.4f}"
+        f" invalid_rate={metrics['eval/invalid_rate']:.4f}"
+        f" ships_sent_mean={metrics['eval/ships_sent_mean']:.4f}"
+    )
     return _write_metrics(metrics, out_dir)
 
 
