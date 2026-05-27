@@ -48,8 +48,9 @@ def train_ppo(config: PPOTrainConfig) -> Path:
     policy_kwargs = dict(
         activation_fn=th.nn.ReLU,
         net_arch=dict(pi=list(config.net_arch), vf=list(config.net_arch)),
-        log_std_init=-2.0,
     )
+    if not config.use_action_masking:
+        policy_kwargs["log_std_init"] = -2.0
     model_cls = MaskablePPO if config.use_action_masking else PPO
     model = model_cls(
         "MlpPolicy",
