@@ -434,7 +434,6 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         self.episode_enemy_captures = 0
         self.episode_neutral_captures = 0
         self.episode_return_scaled = 0.0
-        self.episode_return_log_scale = 0.1
         self.current_map_seed: int | None = None
 
     def reset(self, *, seed: int | None = None, options: dict | None = None):
@@ -741,11 +740,17 @@ class OrbitWarsPlanetStepEnv(gym.Env):
                 self._seed_cycle.insert(0, self.current_map_seed)
             reward = float(reward + terminal_reward)
         scaled_reward = float(reward * self.reward_config.reward_scale)
-        self.episode_return_scaled += scaled_reward * self.episode_return_log_scale
+        self.episode_return_scaled += scaled_reward
         self.episode_turn_count = self.turn_index
         win_rate = 1.0 if terminated and not truncated and terminal_reward > 0 else 0.0
         loss_rate = 1.0 if terminated and not truncated and terminal_reward < 0 else 0.0
         timeout_rate = 1.0 if truncated else 0.0
+        if loss_rate == 1.0 and self.episode_return_scaled > 0:
+            print(
+                "[reward-warning] Loss episode has positive return "
+                f"map_seed={self.current_map_seed} terminal_unscaled={terminal_reward:.3f} "
+                f"episode_return_scaled={self.episode_return_scaled:.3f}"
+            )
         return (
             self._current_obs(),
             scaled_reward,
@@ -787,15 +792,17 @@ class OrbitWarsPlanetStepEnv(gym.Env):
                 "reward_total": scaled_reward,
                 "reward_scalar_returned_by_step": scaled_reward,
                 "episode_components": {
-                    "reward/terminal": terminal_reward,
+                    "reward/terminal_unscaled": terminal_reward,
                     "reward/strategic_delta": strategic_delta,
                     "reward/capture": capture_reward,
                     "reward/ship_delta": ship_delta_reward,
                     "reward/production_delta": production_delta_reward,
                     "reward/capture_delta": capture_delta_reward,
                     "reward/local_action": send_reward,
-                    "reward/total": scaled_reward,
-                    "reward/episode_return": float(self.episode_return_scaled),
+                    "reward/step_total_scaled": scaled_reward,
+                    "reward/episode_return_scaled": float(self.episode_return_scaled),
+                    "reward/episode_return_unscaled": float(self.episode_return_scaled / max(self.reward_config.reward_scale, 1e-12)),
+                    "reward/shaping_return_scaled": float(self.episode_return_scaled - (terminal_reward * self.reward_config.reward_scale)),
                     "train_rollout/stochastic_win_rate": win_rate,
                     "game/loss_rate": loss_rate,
                     "game/timeout_rate": timeout_rate,

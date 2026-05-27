@@ -34,12 +34,14 @@ class EpisodeComponentLogger(BaseCallback):
             for key, value in episode.items():
                 self.logger.record(key, float(value))
             ordered_keys = [
-                "reward/terminal",
+                "reward/terminal_unscaled",
                 "reward/strategic_delta",
                 "reward/capture",
                 "reward/local_action",
-                "reward/total",
-                "reward/episode_return",
+                "reward/step_total_scaled",
+                "reward/episode_return_scaled",
+                "reward/episode_return_unscaled",
+                "reward/shaping_return_scaled",
                 "train_rollout/stochastic_win_rate",
                 "game/loss_rate",
                 "game/timeout_rate",
