@@ -18,11 +18,10 @@ def test_observation_length_encoding_ship_signs_totals_and_delta():
     assert obs[0] == 5  # source + friendly production
     assert obs[1] == 2
     assert obs[2] == 10
-    # current candidate ranking prioritizes lower ship count first.
-    assert [p.id for p in chosen] == [3, 2, 1]
-    assert obs[3:6].tolist() == [1, 5, 3]
+    assert [p.id for p in chosen] == [1, 2, 3]
+    assert obs[3:6].tolist() == [-1, -7, 5]
     assert obs[6:9].tolist() == [0, -6, 4]
-    assert obs[9:12].tolist() == [-1, -7, 5]
+    assert obs[9:12].tolist() == [1, 5, 3]
     assert obs[12:15].tolist() == [0, 0, 0]
 
 

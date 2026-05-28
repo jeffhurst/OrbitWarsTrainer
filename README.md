@@ -117,10 +117,10 @@ Like starter-vs-starter, this runs a real Kaggle environment episode and writes 
 ## Export a Kaggle submission
 
 ```bash
-python scripts/export_submission.py --model runs/models/bootstrap_policy.zip --out submission.py
+python scripts/export_submission.py --model runs/models/ppo_surface_v7.zip --out submission.py
 ```
 
-The v1 exporter writes a standalone fallback starter-style submission with no local package imports. Future work can embed serialized model weights directly into the exported file.
+The exporter writes a single standalone Kaggle `submission.py` with embedded saved-model weights and an `agent(obs, config)` entrypoint. The generated file has no local package, Stable-Baselines3, Torch, or NumPy imports, so it can be copied into the Kaggle notebook submission flow.
 
 ## Tests
 
@@ -136,4 +136,4 @@ The suite covers geometry, quadrants, candidate selection, observation building,
 - Kaggle environment APIs are optional and isolated under `env/` because local installations can differ.
 - Watch scripts require a Kaggle environment version that includes `orbit_wars`; they no longer use the old synthetic visual fallback.
 - The training pipeline currently bootstraps a policy artifact; full PPO/self-play integration should happen only after visual candidate validation.
-- Submission export currently embeds the robust starter fallback; model weight embedding is the next submission milestone.
+- Submission export embeds saved lightweight and PPO policy weights directly into a standalone Python file.

@@ -681,6 +681,8 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         team_reward = float(dense_reward + capture_reward + invalid_action_penalty)
         reward = float(team_reward / num_owned_planets)
         terminal_reward = 0.0
+        lost_episode = False
+        loss_return_correction = 0.0
         state_rewards: tuple[float, float] | None = None
         self.previous_total_production = current_total
         buffered = list(candidate_actions)
@@ -703,6 +705,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
                 terminal_reward = timeout_outcome_reward(
                     candidate_score, opponent_score, self.reward_config
                 )
+                lost_episode = candidate_score < opponent_score
             else:
                 if state_rewards is not None and state_rewards[0] != state_rewards[1]:
                     candidate_state_reward = state_rewards[self.candidate_player]
@@ -724,6 +727,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
                             self.reward_config.loss_penalty
                             + self.reward_config.loss_survival_bonus * progress
                         )
+                        lost_episode = True
                 else:
                     terminal_reward = game_outcome_reward(
                         candidate_score=candidate_score,
@@ -732,6 +736,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
                         max_episode_turns=self.max_episode_turns,
                         config=self.reward_config,
                     )
+                    lost_episode = candidate_score < opponent_score
             if (
                 self.current_map_seed is not None
                 and candidate_score < opponent_score
@@ -739,11 +744,21 @@ class OrbitWarsPlanetStepEnv(gym.Env):
             ):
                 self._seed_cycle.insert(0, self.current_map_seed)
             reward = float(reward + terminal_reward)
+            if lost_episode:
+                scale = max(self.reward_config.reward_scale, 1e-12)
+                projected_return = self.episode_return_scaled + reward * scale
+                if projected_return >= 0.0:
+                    loss_return_correction = (
+                        projected_return / scale
+                        + max(1e-9, self.reward_config.loss_return_margin)
+                    )
+                    terminal_reward = float(terminal_reward - loss_return_correction)
+                    reward = float(reward - loss_return_correction)
         scaled_reward = float(reward * self.reward_config.reward_scale)
         self.episode_return_scaled += scaled_reward
         self.episode_turn_count = self.turn_index
         win_rate = 1.0 if terminated and not truncated and terminal_reward > 0 else 0.0
-        loss_rate = 1.0 if terminated and not truncated and terminal_reward < 0 else 0.0
+        loss_rate = 1.0 if lost_episode else 0.0
         timeout_rate = 1.0 if truncated else 0.0
         if loss_rate == 1.0 and self.episode_return_scaled > 0:
             print(
@@ -764,6 +779,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
                 "capture_reward": capture_reward,
                 "send_reward": send_reward,
                 "terminal_reward": terminal_reward,
+                "loss_return_correction": loss_return_correction,
                 "terminal_state_rewards": state_rewards,
                 "buffered_actions": buffered,
                 "turn_index": self.turn_index,
@@ -793,6 +809,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
                 "reward_scalar_returned_by_step": scaled_reward,
                 "episode_components": {
                     "reward/terminal_unscaled": terminal_reward,
+                    "reward/loss_return_correction": loss_return_correction,
                     "reward/strategic_delta": strategic_delta,
                     "reward/capture": capture_reward,
                     "reward/ship_delta": ship_delta_reward,

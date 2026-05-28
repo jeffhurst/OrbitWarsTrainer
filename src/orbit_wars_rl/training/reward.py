@@ -31,6 +31,7 @@ class RewardShapingConfig:
     local_action_weight: float = 1.0
     dense_reward_clip: float = 2.0
     reward_scale: float = 0.1
+    loss_return_margin: float = 1.0
 
 
 def _norm_diff(a: float, b: float, total: float) -> float:

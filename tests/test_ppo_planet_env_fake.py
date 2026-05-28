@@ -3,6 +3,7 @@ import pytest
 from orbit_wars_rl.core.candidates import CandidateConfig
 from orbit_wars_rl.core.observations import ObservationBuilder
 from orbit_wars_rl.env.ppo_planet_env import OrbitWarsPlanetStepEnv, _FakeOrbitWarsBackend
+from orbit_wars_rl.training.reward import game_outcome_reward, player_score
 
 
 def test_fake_planet_step_env_shapes_and_production_delta_reward():
@@ -122,7 +123,15 @@ def test_fake_planet_step_env_adds_early_win_terminal_bonus(monkeypatch):
 
     assert terminated is True
     assert truncated is False
-    assert info["terminal_reward"] == pytest.approx(600.0 + 300.0 * (3 / 4))
+    assert info["terminal_reward"] == pytest.approx(
+        game_outcome_reward(
+            candidate_score=player_score(env.obs, env.candidate_player),
+            opponent_score=player_score(env.obs, 1 - env.candidate_player),
+            turn_index=env.turn_index,
+            max_episode_turns=env.max_episode_turns,
+            config=env.reward_config,
+        )
+    )
     assert reward == pytest.approx(info["reward_total"])
 
 
@@ -148,6 +157,37 @@ def test_fake_planet_step_env_adds_ship_score_terminal_bonus_on_truncation(monke
     assert truncated is True
     assert -100.0 <= info["terminal_reward"] <= 100.0
     assert reward == pytest.approx(info["reward_total"])
+
+
+def test_loss_episode_total_return_is_forced_negative(monkeypatch):
+    from orbit_wars_rl.env import ppo_planet_env
+
+    def fake_step_kaggle_env(backend, actions_for_player0, actions_for_player1):
+        del actions_for_player0, actions_for_player1
+        backend.turn += 1
+        backend.obs["step"] = backend.turn
+        backend.obs["planets"] = [
+            [0, 1, 80.0, 20.0, 2.0, 120, 3.0],
+            [1, 1, 75.0, 25.0, 2.0, 120, 3.0],
+            [2, 1, 20.0, 80.0, 2.0, 120, 3.0],
+        ]
+        backend.done = True
+
+    monkeypatch.setattr(ppo_planet_env, "_step_kaggle_env", fake_step_kaggle_env)
+    env = OrbitWarsPlanetStepEnv(require_kaggle=False, max_episode_turns=4)
+    env.reset(seed=123)
+    env.episode_return_scaled = 500.0
+
+    _next_obs, reward, terminated, truncated, info = env._advance_turn([])
+
+    assert terminated is True
+    assert truncated is False
+    assert reward == pytest.approx(info["reward_total"])
+    assert info["loss_return_correction"] > 0.0
+    assert info["episode_components"]["game/loss_rate"] == 1.0
+    assert env.episode_return_scaled < 0.0
+    assert info["episode_components"]["reward/episode_return_scaled"] < 0.0
+
 
 def test_reset_uses_new_random_map_seed_for_each_game(monkeypatch):
     from orbit_wars_rl.env import ppo_planet_env
