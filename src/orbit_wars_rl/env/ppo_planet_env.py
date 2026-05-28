@@ -449,7 +449,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         if map_seed_opt is not None:
             map_seed = int(map_seed_opt)
         else:
-            if len(self._seed_cycle) < 28:
+            if len(self._seed_cycle) < 4:
                 self._seed_cycle = MAP_SEEDS.copy()
                 self._map_seed_rng.shuffle(self._seed_cycle)
             map_seed = self._seed_cycle.pop()
@@ -517,7 +517,9 @@ class OrbitWarsPlanetStepEnv(gym.Env):
                 continue
             meaningful_target_indices.append(idx)
         has_meaningful_action = bool(meaningful_target_indices)
-        target_mask = [not has_meaningful_action] + [i in meaningful_target_indices for i in range(1, 5)]
+        target_mask = [not has_meaningful_action] + [
+            i in meaningful_target_indices for i in range(1, 5)
+        ]
         amount_mask = [True] * 101
         return target_mask + amount_mask
 
@@ -748,9 +750,8 @@ class OrbitWarsPlanetStepEnv(gym.Env):
                 scale = max(self.reward_config.reward_scale, 1e-12)
                 projected_return = self.episode_return_scaled + reward * scale
                 if projected_return >= 0.0:
-                    loss_return_correction = (
-                        projected_return / scale
-                        + max(1e-9, self.reward_config.loss_return_margin)
+                    loss_return_correction = projected_return / scale + max(
+                        1e-9, self.reward_config.loss_return_margin
                     )
                     terminal_reward = float(terminal_reward - loss_return_correction)
                     reward = float(reward - loss_return_correction)
@@ -818,8 +819,14 @@ class OrbitWarsPlanetStepEnv(gym.Env):
                     "reward/local_action": send_reward,
                     "reward/step_total_scaled": scaled_reward,
                     "reward/episode_return_scaled": float(self.episode_return_scaled),
-                    "reward/episode_return_unscaled": float(self.episode_return_scaled / max(self.reward_config.reward_scale, 1e-12)),
-                    "reward/shaping_return_scaled": float(self.episode_return_scaled - (terminal_reward * self.reward_config.reward_scale)),
+                    "reward/episode_return_unscaled": float(
+                        self.episode_return_scaled
+                        / max(self.reward_config.reward_scale, 1e-12)
+                    ),
+                    "reward/shaping_return_scaled": float(
+                        self.episode_return_scaled
+                        - (terminal_reward * self.reward_config.reward_scale)
+                    ),
                     "train_rollout/stochastic_win_rate": win_rate,
                     "game/loss_rate": loss_rate,
                     "game/timeout_rate": timeout_rate,
