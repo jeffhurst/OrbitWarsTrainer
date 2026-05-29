@@ -449,7 +449,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         if map_seed_opt is not None:
             map_seed = int(map_seed_opt)
         else:
-            if len(self._seed_cycle) < 15:
+            if len(self._seed_cycle) < 5:
                 self._seed_cycle = MAP_SEEDS.copy()
                 self._map_seed_rng.shuffle(self._seed_cycle)
             map_seed = self._seed_cycle.pop()
