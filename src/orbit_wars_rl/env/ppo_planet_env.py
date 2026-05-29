@@ -75,7 +75,7 @@ from orbit_wars_rl.core.geometry import (
     trajectory_crosses_sun,
 )
 from orbit_wars_rl.core.observations import ObservationBuilder
-from orbit_wars_rl.core.planets import total_production
+from orbit_wars_rl.core.planets import owner_priority, total_production
 from orbit_wars_rl.core.types import Planet, parse_planets, rows
 from orbit_wars_rl.env.kaggle_env import require_kaggle_env
 from orbit_wars_rl.models.save_load import load_any_policy
@@ -449,7 +449,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         if map_seed_opt is not None:
             map_seed = int(map_seed_opt)
         else:
-            if len(self._seed_cycle) < 4:
+            if len(self._seed_cycle) < 15:
                 self._seed_cycle = MAP_SEEDS.copy()
                 self._map_seed_rng.shuffle(self._seed_cycle)
             map_seed = self._seed_cycle.pop()
@@ -981,9 +981,10 @@ class OrbitWarsPlanetStepEnv(gym.Env):
     def _current_obs_and_candidates(
         self, source: Planet
     ) -> tuple[np.ndarray, list[Planet], list]:
+        planets = parse_planets(self.obs)
         vec, chosen, launches = self.builder.build_filtered_for_source(
             source,
-            parse_planets(self.obs),
+            planets,
             self.candidate_player,
             previous_total_production=self.previous_total_production,
             comet_ids=comet_ids_from_obs(self.obs),
@@ -991,4 +992,22 @@ class OrbitWarsPlanetStepEnv(gym.Env):
             fleet_speed=float(self.obs.get("fleet_speed", 1.0)),
             sun_radius=sun_collision_radius_from_obs(self.obs),
         )
+        paired = list(zip(chosen, launches))
+        paired.sort(
+            key=lambda pair: (
+                owner_priority(pair[0], self.candidate_player),
+                -pair[0].production,
+            )
+        )
+        if paired:
+            chosen = [planet for planet, _launch in paired]
+            launches = [launch for _planet, launch in paired]
+            vec, chosen = self.builder.build_for_source(
+                source,
+                planets,
+                self.candidate_player,
+                previous_total_production=self.previous_total_production,
+                comet_ids=comet_ids_from_obs(self.obs),
+                candidates=chosen,
+            )
         return np.asarray(list(vec), dtype=np.float32), chosen, launches

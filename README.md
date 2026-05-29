@@ -56,7 +56,7 @@ For each owned source planet:
 - Static planets are included if not orbiting, not comets, and within 25 Euclidean units.
 - Orbiting planets are included if they are in the counterclockwise screen-coordinate quadrant from the source.
 - Comets and the source planet are excluded.
-- Candidates are sorted by production descending, then enemy > neutral > friendly, then distance ascending, then id.
+- Candidates are sorted by enemy > neutral > friendly, then production descending, then distance ascending, then id.
 - Top 4 are used.
 
 Quadrants use screen coordinates around `(50, 50)`:

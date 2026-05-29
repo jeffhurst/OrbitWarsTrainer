@@ -52,6 +52,32 @@ def test_planet_step_env_observes_and_decodes_filtered_candidates():
     assert len(info["buffered_actions"]) == 1
 
 
+def test_planet_step_env_prioritizes_enemy_neutral_friendly_candidates():
+    env = OrbitWarsPlanetStepEnv(require_kaggle=False, max_episode_turns=4)
+    env.reset(seed=123)
+    env.candidate_config = CandidateConfig(static_radius=120)
+    env.builder = ObservationBuilder(env.candidate_config)
+    env.obs = {
+        "player": 0,
+        "planets": [
+            [0, 0, 80, 80, 5, 20, 1],
+            [1, 0, 81, 80, 5, 5, 10],
+            [2, -1, 82, 80, 5, 5, 9],
+            [3, 1, 83, 80, 5, 5, 1],
+        ],
+        "fleets": [],
+    }
+    env.previous_total_production = 11.0
+    env._rebuild_sources()
+
+    current_obs, chosen, _launches = env._current_obs_and_candidates(env.sources[0])
+
+    assert [p.id for p in chosen] == [3, 2, 1]
+    assert current_obs[3:6].tolist() == [-1, -5, 1]
+    assert current_obs[6:9].tolist() == [0, -5, 9]
+    assert current_obs[9:12].tolist() == [1, 5, 10]
+
+
 def test_fake_planet_step_env_loads_model_opponent(tmp_path):
     from orbit_wars_rl.agents.model_agent import ModelAgent
     from orbit_wars_rl.models.policy import NumpyPolicy

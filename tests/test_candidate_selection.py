@@ -17,7 +17,7 @@ def test_static_radius_orbiting_quadrant_comets_and_source_excluded():
     assert [p.id for p in selected] == [3, 1]
 
 
-def test_top_4_sorted_by_production_then_owner_priority_then_ships():
+def test_top_4_sorted_by_owner_priority_then_production_then_ships():
     source = planet(0, 0, 80, 80, prod=1)
     planets = [
         source,
@@ -28,7 +28,7 @@ def test_top_4_sorted_by_production_then_owner_priority_then_ships():
         planet(5, -1, 85, 80, ships=8, prod=2, radius=10),
     ]
     selected = select_candidates(source, planets, 0, set()).candidates
-    assert [p.id for p in selected] == [1, 2, 3, 5]
+    assert [p.id for p in selected] == [3, 2, 5, 4]
 
 
 def test_orbiting_source_uses_quadrant_static_selection():

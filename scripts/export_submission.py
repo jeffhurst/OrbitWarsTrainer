@@ -203,8 +203,8 @@ def _select_candidates(src, planets, player, comets):
         group[_pid(p)] = 1
     combined.sort(
         key=lambda p: (
-            -_production(p),
             _owner_priority(p, player),
+            -_production(p),
             _ships(p),
             group[_pid(p)],
             _dist(src, p),

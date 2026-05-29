@@ -99,8 +99,8 @@ def select_candidates(
     candidate_group.update({p.id: 1 for p in orbiting})
     combined.sort(
         key=lambda p: (
-            -p.production,
             owner_priority(p, player),
+            -p.production,
             p.ships,
             candidate_group[p.id],
             distance(source, p),
