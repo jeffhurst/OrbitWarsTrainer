@@ -251,12 +251,50 @@ def test_reset_rebuilds_seed_pool_when_below_threshold():
 
     env = OrbitWarsPlanetStepEnv(require_kaggle=False, seed=7)
     env._seed_cycle = [101, 102, 103, 104]
+    env._last_seed_pool_size = 4
+    env._unchanged_seed_pool_iterations = 3
 
     env.reset()
 
     assert env.current_map_seed in ppo_planet_env.MAP_SEEDS
     assert len(env._seed_cycle) == len(ppo_planet_env.MAP_SEEDS) - 1
     assert set(env._seed_cycle).issubset(set(ppo_planet_env.MAP_SEEDS))
+    assert env._last_seed_pool_size is None
+    assert env._unchanged_seed_pool_iterations == 0
+
+
+def test_terminal_loss_resets_seed_pool_after_stagnant_size(monkeypatch):
+    from orbit_wars_rl.env import ppo_planet_env
+
+    def fake_step_kaggle_env(backend, actions_for_player0, actions_for_player1):
+        del actions_for_player0, actions_for_player1
+        backend.turn += 1
+        backend.obs["step"] = backend.turn
+        backend.obs["planets"] = [
+            [0, 1, 80.0, 20.0, 2.0, 120, 3.0],
+            [1, 1, 75.0, 25.0, 2.0, 120, 3.0],
+            [2, 1, 20.0, 80.0, 2.0, 120, 3.0],
+        ]
+        backend.done = True
+
+    monkeypatch.setattr(ppo_planet_env, "_step_kaggle_env", fake_step_kaggle_env)
+    env = OrbitWarsPlanetStepEnv(require_kaggle=False, seed=7)
+    env.reset()
+    env._seed_cycle = [
+        seed for seed in ppo_planet_env.MAP_SEEDS if seed != env.current_map_seed
+    ][:20]
+    env._last_seed_pool_size = len(env._seed_cycle) + 1
+    env._unchanged_seed_pool_iterations = env.seed_pool_stagnation_limit - 1
+
+    _next_obs, _reward, terminated, truncated, info = env._advance_turn([])
+
+    assert terminated is True
+    assert truncated is False
+    assert len(env._seed_cycle) == len(ppo_planet_env.MAP_SEEDS)
+    assert env._last_seed_pool_size is None
+    assert env._unchanged_seed_pool_iterations == 0
+    assert info["episode_components"]["game/seed_pool_reset"] == 1.0
+    assert info["episode_components"]["game/seed_pool_stagnation_iterations"] == 0.0
 
 
 def test_episode_components_have_no_pressure_or_waste_and_reward_totals_match():

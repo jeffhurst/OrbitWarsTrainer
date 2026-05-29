@@ -380,6 +380,8 @@ class OrbitWarsPlanetStepEnv(gym.Env):
     action_space = spaces.MultiDiscrete([5, 101])
     min_source_ships_to_act = 11
     capture_margin = 1
+    seed_pool_min_size = 5
+    seed_pool_stagnation_limit = 10
 
     def __init__(
         self,
@@ -409,6 +411,8 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         self._map_seed_rng = random.Random(seed)
         self._episode_index = 0
         self._seed_cycle: list[int] = []
+        self._last_seed_pool_size: int | None = None
+        self._unchanged_seed_pool_iterations = 0
         self.max_episode_turns = max_episode_turns
         self.require_kaggle = require_kaggle
         self.candidate_config = CandidateConfig()
@@ -449,9 +453,8 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         if map_seed_opt is not None:
             map_seed = int(map_seed_opt)
         else:
-            if len(self._seed_cycle) < 5:
-                self._seed_cycle = MAP_SEEDS.copy()
-                self._map_seed_rng.shuffle(self._seed_cycle)
+            if len(self._seed_cycle) < self.seed_pool_min_size:
+                self._rebuild_seed_pool()
             map_seed = self._seed_cycle.pop()
 
         self.current_map_seed = map_seed
@@ -685,6 +688,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
         terminal_reward = 0.0
         lost_episode = False
         loss_return_correction = 0.0
+        seed_pool_reset = False
         state_rewards: tuple[float, float] | None = None
         self.previous_total_production = current_total
         buffered = list(candidate_actions)
@@ -745,6 +749,7 @@ class OrbitWarsPlanetStepEnv(gym.Env):
                 and self.current_map_seed not in self._seed_cycle
             ):
                 self._seed_cycle.insert(0, self.current_map_seed)
+            seed_pool_reset = self._reset_seed_pool_if_stagnant()
             reward = float(reward + terminal_reward)
             if lost_episode:
                 scale = max(self.reward_config.reward_scale, 1e-12)
@@ -836,6 +841,10 @@ class OrbitWarsPlanetStepEnv(gym.Env):
                     "game/map_seed": float(self.current_map_seed or -1),
                     "game/our_captures_this_turn": float(we_captured),
                     "game/enemy_captures_this_turn": float(enemy_captured),
+                    "game/seed_pool_stagnation_iterations": float(
+                        self._unchanged_seed_pool_iterations
+                    ),
+                    "game/seed_pool_reset": float(seed_pool_reset),
                     "action/invalid_rate": float(
                         self.episode_invalid_action_count
                         / max(1, self.episode_action_count)
@@ -850,6 +859,26 @@ class OrbitWarsPlanetStepEnv(gym.Env):
                 else None,
             },
         )
+
+    def _rebuild_seed_pool(self) -> None:
+        self._seed_cycle = MAP_SEEDS.copy()
+        self._map_seed_rng.shuffle(self._seed_cycle)
+        self._last_seed_pool_size = None
+        self._unchanged_seed_pool_iterations = 0
+
+    def _reset_seed_pool_if_stagnant(self) -> bool:
+        current_size = len(self._seed_cycle)
+        if self._last_seed_pool_size == current_size:
+            self._unchanged_seed_pool_iterations += 1
+        else:
+            self._last_seed_pool_size = current_size
+            self._unchanged_seed_pool_iterations = 0
+
+        if self._unchanged_seed_pool_iterations < self.seed_pool_stagnation_limit:
+            return False
+
+        self._rebuild_seed_pool()
+        return True
 
     def _build_opponent_agent(self) -> Any:
         if self.opponent == "starter":

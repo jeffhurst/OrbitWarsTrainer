@@ -8,6 +8,13 @@ from orbit_wars_rl.training.ppo_train import parse_net_arch
 def test_ppo_config_defaults_validate():
     cfg = PPOTrainConfig()
     cfg.validate()
+    assert cfg.learning_rate == 1.25e-4
+    assert cfg.n_steps == 4096
+    assert cfg.batch_size == 512
+    assert cfg.n_epochs == 6
+    assert cfg.clip_range == 0.18
+    assert cfg.ent_coef == 0.003
+    assert cfg.target_kl == 0.03
     assert cfg.net_arch == (256, 256, 128)
     assert cfg.n_envs == 1
     assert cfg.opponent_model is None

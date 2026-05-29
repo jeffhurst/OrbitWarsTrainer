@@ -16,15 +16,15 @@ class PPOTrainConfig:
     n_envs: int = 1
 
     # PPO hyperparameters for per-planet-action Orbit Wars env.
-    learning_rate: float = 7.5e-5
-    n_steps: int = 8192
-    batch_size: int = 1024
-    n_epochs: int = 5
+    learning_rate: float = 1.25e-4
+    n_steps: int = 4096
+    batch_size: int = 512
+    n_epochs: int = 6
     gamma: float = 0.999
     gae_lambda: float = 0.97
-    clip_range: float = 0.14
-    ent_coef: float = 0.002
-    target_kl: float = 0.02
+    clip_range: float = 0.18
+    ent_coef: float = 0.003
+    target_kl: float = 0.03
     vf_coef: float = 0.75
     max_grad_norm: float = 0.5
 
